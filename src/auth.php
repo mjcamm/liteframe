@@ -10,36 +10,59 @@
 // Current authenticated user for this request
 $_current_user = null;
 
-// --- JWT functions (no library needed) ---
+// --- JWT functions (hand-rolled, no library needed) ---
+//
+// Why hand-roll instead of firebase/php-jwt?
+// - We only need HS256 (HMAC-SHA256). The full library adds RS256, ES256, EdDSA,
+//   key rings, and algorithm negotiation — all of which expand the attack surface.
+//   CVE-2021-46743 was an algorithm-confusion bug that only exists because the
+//   library supports multiple key types. We can't have that bug: there's no
+//   algorithm selection to confuse.
+// - The actual crypto is PHP built-ins: hash_hmac() and hash_equals(). We're not
+//   implementing cryptography, just calling it.
 
 function _lf_jwt_encode(array $payload, string $secret): string
 {
+    // JWT structure: base64url(header) . base64url(payload) . base64url(signature)
+    // We hardcode HS256 — no algorithm parameter, no negotiation, no confusion.
     $header = _lf_base64url_encode(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
     $payload = _lf_base64url_encode(json_encode($payload));
+
+    // HMAC-SHA256: keyed hash that proves the token was created by someone who
+    // knows the secret. The `true` flag returns raw binary (32 bytes) instead
+    // of hex (64 chars) — base64url then encodes that to 43 chars.
     $signature = _lf_base64url_encode(hash_hmac('sha256', "{$header}.{$payload}", $secret, true));
+
     return "{$header}.{$payload}.{$signature}";
 }
 
 function _lf_jwt_decode(string $token, string $secret): ?array
 {
+    // A valid JWT always has exactly 3 dot-separated parts
     $parts = explode('.', $token);
     if (count($parts) !== 3) return null;
 
     [$header, $payload, $signature] = $parts;
 
-    // Verify signature
+    // Recompute the signature from the header+payload we received, using our
+    // secret. If it matches what the token claims, the token is authentic.
+    // hash_equals() is constant-time — prevents timing attacks where an attacker
+    // measures response time to guess the signature byte-by-byte.
     $expected = _lf_base64url_encode(hash_hmac('sha256', "{$header}.{$payload}", $secret, true));
     if (!hash_equals($expected, $signature)) return null;
 
     $data = json_decode(_lf_base64url_decode($payload), true);
     if (!$data) return null;
 
-    // Check expiry
+    // Check expiry — the only claim we enforce. "exp" is a Unix timestamp.
     if (isset($data['exp']) && $data['exp'] < time()) return null;
 
     return $data;
 }
 
+// Base64url encoding per RFC 7515 §2:
+// Standard base64 but with + → -, / → _, and no = padding.
+// This makes tokens URL-safe (no characters that need percent-encoding).
 function _lf_base64url_encode(string $data): string
 {
     return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
