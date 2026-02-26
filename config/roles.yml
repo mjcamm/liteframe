@@ -1,0 +1,4 @@
+# Role definitions
+
+roles: admin
+default_role: admin

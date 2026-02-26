@@ -1,0 +1,14 @@
+# Cron tasks — checked on every request, run when due.
+#
+# task_name:
+#   function: function_name    (must exist in functions/)
+#   every: 60                  (interval in minutes)
+#
+# Example:
+# cleanup_tokens:
+#   function: cleanup_expired_tokens
+#   every: 60
+#
+# send_digest:
+#   function: send_daily_digest
+#   every: 1440

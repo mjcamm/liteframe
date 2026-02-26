@@ -1,0 +1,3 @@
+user:
+  email: email, required=true
+  role: string, default=admin

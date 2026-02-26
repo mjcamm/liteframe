@@ -1,0 +1,5 @@
+hello:
+  path: /hello
+  handler: hello
+  method: GET
+  auth: false

@@ -1,0 +1,218 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * LightFrame CLI
+ *
+ * Usage:
+ *   php lightframe build       — compile PHP backend + build frontend
+ *   php lightframe build:back  — compile PHP backend only
+ *   php lightframe build:front — build frontend only
+ *   php lightframe dev         — start frontend dev server with API proxy
+ *   php lightframe cron        — run all cron tasks (ignores timing)
+ */
+
+require_once __DIR__ . '/src/settings.php';
+settings_load(__DIR__ . '/settings.yml');
+
+$command = $argv[1] ?? 'help';
+
+match ($command) {
+    'build'       => cmd_build_all(),
+    'build:back'  => cmd_build_backend(),
+    'build:front' => cmd_build_frontend(),
+    'dev'         => cmd_dev(),
+    'cron'        => cmd_cron(),
+    default       => cmd_help(),
+};
+
+// --- Commands ---
+
+function cmd_build_all(): void
+{
+    cmd_build_backend();
+    cmd_build_frontend();
+    cmd_copy_frontend_to_dist();
+}
+
+function cmd_build_backend(): void
+{
+    echo "Building backend...\n";
+    require_once __DIR__ . '/build.php';
+    $distFile = lightframe_build(__DIR__, __DIR__ . '/dist');
+    echo "  Built {$distFile} (" . filesize($distFile) . " bytes)\n";
+    echo "  Auto-setup: .htaccess and robots.txt will be created on first request\n";
+    $cronKey = setting('cron_key', '');
+    if ($cronKey !== '') {
+        echo "  Cron URL: /api/cron?key={$cronKey}\n";
+    }
+}
+
+function cmd_build_frontend(): void
+{
+    $frontendPath = setting('frontend.path');
+    if (!$frontendPath) {
+        echo "  No frontend configured in settings.yml\n";
+        return;
+    }
+
+    $dir = __DIR__ . '/' . $frontendPath;
+    if (!is_dir($dir)) {
+        echo "  Frontend directory not found: {$dir}\n";
+        return;
+    }
+
+    if (!file_exists($dir . '/package.json')) {
+        echo "  No package.json in {$dir}\n";
+        return;
+    }
+
+    echo "Building frontend...\n";
+    $buildDir = $dir . '/build';
+    passthru("cd \"{$dir}\" && npm run build", $exitCode);
+
+    if ($exitCode === 0) {
+        $count = count(glob($buildDir . '/*', GLOB_NOSORT));
+        echo "  Built to {$frontendPath}/build/ ({$count} files)\n";
+    } else {
+        echo "  Frontend build failed!\n";
+    }
+}
+
+function cmd_copy_frontend_to_dist(): void
+{
+    $frontendPath = setting('frontend.path');
+    if (!$frontendPath) return;
+
+    $buildDir = __DIR__ . '/' . $frontendPath . '/build';
+    $distFrontend = __DIR__ . '/dist/frontend';
+
+    if (!is_dir($buildDir)) {
+        echo "  No frontend build found at {$buildDir}\n";
+        return;
+    }
+
+    // Clean and recreate dist/frontend
+    if (is_dir($distFrontend)) {
+        recursive_delete($distFrontend);
+    }
+    recursive_copy($buildDir, $distFrontend);
+
+    $count = count(glob($distFrontend . '/*', GLOB_NOSORT));
+    echo "Packaging dist/...\n";
+    echo "  Copied frontend to dist/frontend/ ({$count} items)\n";
+    echo "  Ready to deploy: upload dist/ folder to server\n";
+}
+
+function recursive_copy(string $src, string $dst): void
+{
+    if (!is_dir($dst)) mkdir($dst, 0755, true);
+    foreach (scandir($src) as $item) {
+        if ($item === '.' || $item === '..') continue;
+        $s = $src . '/' . $item;
+        $d = $dst . '/' . $item;
+        is_dir($s) ? recursive_copy($s, $d) : copy($s, $d);
+    }
+}
+
+function recursive_delete(string $dir): void
+{
+    if (!is_dir($dir)) return;
+    foreach (scandir($dir) as $item) {
+        if ($item === '.' || $item === '..') continue;
+        $path = $dir . '/' . $item;
+        is_dir($path) ? recursive_delete($path) : unlink($path);
+    }
+    rmdir($dir);
+}
+
+function cmd_dev(): void
+{
+    $frontendPath = setting('frontend.path');
+    if (!$frontendPath) {
+        echo "No frontend configured in settings.yml\n";
+        return;
+    }
+
+    $dir = __DIR__ . '/' . $frontendPath;
+    if (!is_dir($dir)) {
+        echo "Frontend directory not found: {$dir}\n";
+        return;
+    }
+
+    $port = setting('frontend.dev_port', '5173');
+    echo "Starting frontend dev server on port {$port}...\n";
+    echo "API requests to /api/* will be proxied to your PHP backend.\n\n";
+    passthru("cd \"{$dir}\" && npm run dev -- --port {$port}");
+}
+
+function cmd_cron(): void
+{
+    // Minimal bootstrap: Database, variables, cron, derived (for functions_load)
+    require_once __DIR__ . '/src/Database.php';
+    require_once __DIR__ . '/src/variables.php';
+    require_once __DIR__ . '/src/cron.php';
+    require_once __DIR__ . '/src/derived.php';
+
+    global $db, $CRONS;
+    $db = new Database(__DIR__ . '/data.db');
+
+    // Load user functions
+    functions_load(__DIR__ . '/functions');
+
+    // Parse cron.yml
+    $cronFile = __DIR__ . '/config/cron.yml';
+    if (file_exists($cronFile)) {
+        $current = null;
+        foreach (file($cronFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+            if ($line[0] === '#') continue;
+            if ($line[0] !== ' ' && str_ends_with(trim($line), ':')) {
+                $current = rtrim(trim($line), ':');
+                $CRONS[$current] = [];
+            } elseif ($current && str_contains($line, ':')) {
+                [$key, $value] = explode(':', $line, 2);
+                $key = trim($key);
+                $value = trim($value);
+                if ($key === 'every') $value = (int) $value;
+                $CRONS[$current][$key] = $value;
+            }
+        }
+    }
+
+    if (empty($CRONS)) {
+        echo "No cron tasks configured in config/cron.yml\n";
+        return;
+    }
+
+    $cronKey = setting('cron_key', '');
+    if ($cronKey !== '') {
+        echo "Cron URL: /api/cron?key={$cronKey}\n\n";
+    }
+
+    echo "Running all cron tasks...\n\n";
+    $results = cron_run_all();
+
+    foreach ($results as $name => $status) {
+        $icon = $status === 'OK' ? '[OK]' : '[!!]';
+        echo "  {$icon} {$name}: {$status}\n";
+    }
+    echo "\n";
+}
+
+function cmd_help(): void
+{
+    echo <<<HELP
+    LightFrame CLI
+
+    Usage: php lightframe <command>
+
+    Commands:
+      build        Build backend + frontend for production
+      build:back   Build PHP backend only (dist/index.php)
+      build:front  Build frontend only (to frontend/build/)
+      dev          Start frontend dev server with API proxy
+      cron         Run all cron tasks (ignores timing)
+
+    HELP;
+    echo "\n";
+}

@@ -1,0 +1,23 @@
+RewriteEngine On
+
+# Pass Authorization header through
+RewriteCond %{HTTP:Authorization} ^(.+)$
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Block access to sensitive files
+RewriteRule \.db$ - [F,L]
+RewriteRule \.yml$ - [F,L]
+RewriteRule ^files/protected/ - [F,L]
+RewriteRule ^files/.*\.ph(p[345s]?|ar|t|tml)$ - [F,L]
+RewriteRule ^(src|config|handlers|hooks|functions|tests|dist|info\.php) - [F,L]
+
+# Serve real files directly (static assets, uploads, etc)
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# Serve frontend build assets (dev mode)
+RewriteCond %{DOCUMENT_ROOT}/frontend/build%{REQUEST_URI} -f
+RewriteRule ^(.+)$ frontend/build/$1 [L]
+
+# Everything else goes through index.php (API routing + SPA fallback)
+RewriteRule ^ index.php [L]

@@ -1,0 +1,21 @@
+# LightFrame Settings
+
+dev_mode: true
+
+token_expiry: 15m
+refresh_expiry: 30d
+
+cron_key: change-me-to-something-secret
+
+uploads:
+  max_size: 10M
+  allowed_types: jpg, jpeg, png, gif, webp, pdf, doc, docx
+
+frontend:
+  path: frontend
+
+cors:
+  origin: "*"
+  methods: GET, POST, PUT, DELETE, OPTIONS
+  headers: Content-Type, Authorization
+  max_age: 86400
