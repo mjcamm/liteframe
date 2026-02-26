@@ -9,7 +9,7 @@
 
 // --- Validate an uploaded file against settings ---
 
-function file_validate(array $file): ?string
+function _lf_file_validate(array $file): ?string
 {
     if ($file['error'] !== UPLOAD_ERR_OK) {
         return match ($file['error']) {
@@ -22,7 +22,7 @@ function file_validate(array $file): ?string
 
     // Check max size
     $maxSize = setting('uploads.max_size', '10M');
-    $maxBytes = parse_file_size($maxSize);
+    $maxBytes = _lf_parse_file_size($maxSize);
     if ($file['size'] > $maxBytes) {
         return "File exceeds maximum size of {$maxSize}";
     }
@@ -42,7 +42,7 @@ function file_validate(array $file): ?string
 
 // --- Parse file size string to bytes ---
 
-function parse_file_size(string $size): int
+function _lf_parse_file_size(string $size): int
 {
     $size = trim($size);
     $unit = strtoupper(substr($size, -1));
@@ -60,7 +60,7 @@ function parse_file_size(string $size): int
 function file_store(array $file, string $storage, string $entityType = null, int $entityId = null, string $field = null): int
 {
     global $db;
-    $projectDir = file_project_dir();
+    $projectDir = _lf_file_project_dir();
 
     $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
     $storedName = uniqid() . '_' . bin2hex(random_bytes(4)) . ($ext ? ".{$ext}" : '');
@@ -97,7 +97,7 @@ function file_delete(int $fileId): void
     if (!$file) return;
 
     $dir = 'files/' . ($file->storage === 'public' ? 'public' : 'protected');
-    $path = file_project_dir() . '/' . $dir . '/' . $file->stored_name;
+    $path = _lf_file_project_dir() . '/' . $dir . '/' . $file->stored_name;
     if (file_exists($path)) {
         unlink($path);
     }
@@ -128,7 +128,7 @@ function file_resolve(int $fileId): ?object
 
 // --- Serve a protected file (streams with headers) ---
 
-function file_serve(int $fileId): void
+function _lf_file_serve(int $fileId): void
 {
     global $db;
     $file = $db->one('SELECT * FROM _files WHERE id = ?', [$fileId]);
@@ -141,7 +141,7 @@ function file_serve(int $fileId): void
 
     // Protected files always require authentication
     if ($file->storage === 'protected') {
-        $authError = auth_check_route([
+        $authError = _lf_auth_check_route([
             'auth' => 'true',
         ]);
         if ($authError) {
@@ -151,7 +151,7 @@ function file_serve(int $fileId): void
     }
 
     $dir = 'files/' . ($file->storage === 'public' ? 'public' : 'protected');
-    $path = file_project_dir() . '/' . $dir . '/' . $file->stored_name;
+    $path = _lf_file_project_dir() . '/' . $dir . '/' . $file->stored_name;
 
     if (!file_exists($path)) {
         http_response_code(404);
@@ -168,7 +168,7 @@ function file_serve(int $fileId): void
 
 // --- Delete all files for an entity ---
 
-function file_cleanup_entity(string $type, int $id): void
+function _lf_file_cleanup_entity(string $type, int $id): void
 {
     global $db;
     try {
@@ -183,7 +183,7 @@ function file_cleanup_entity(string $type, int $id): void
 
 // --- Resolve all file fields on a loaded entity ---
 
-function file_resolve_entity(string $type, object $entity): object
+function _lf_file_resolve_entity(string $type, object $entity): object
 {
     global $TYPES;
     if (!isset($TYPES[$type])) return $entity;
@@ -205,7 +205,7 @@ function file_resolve_entity(string $type, object $entity): object
 
 // --- Process file uploads for entity_save ---
 
-function file_process_uploads(string $type, array $data, int $entityId, ?object $original = null): array
+function _lf_file_process_uploads(string $type, array $data, int $entityId, ?object $original = null): array
 {
     global $TYPES, $request;
     if (!isset($TYPES[$type])) return $data;
@@ -217,7 +217,7 @@ function file_process_uploads(string $type, array $data, int $entityId, ?object 
         if (!$uploaded) continue;
 
         // Validate
-        $error = file_validate($uploaded);
+        $error = _lf_file_validate($uploaded);
         if ($error) {
             return ['error' => "File upload error ({$fieldName}): {$error}"];
         }
@@ -246,7 +246,7 @@ function file_process_uploads(string $type, array $data, int $entityId, ?object 
 
 // --- Get project directory ---
 
-function file_project_dir(): string
+function _lf_file_project_dir(): string
 {
     // In compiled mode, LIGHTFRAME_PROJECT_DIR = __DIR__ (dist/ is the web root)
     // In dev mode, falls back to dirname(__DIR__) (project root from src/)

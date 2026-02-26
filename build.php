@@ -17,7 +17,7 @@ function lightframe_build(string $projectDir, string $distDir): string
 
     // --- Inline all src/ files ---
     // Order matters: Database first, then EntityQuery, then functions, then Router/Request
-    // schema.php included for runtime schema_sync()
+    // schema.php included for runtime _lf_schema_sync()
     $srcOrder = ['Database.php', 'EntityQuery.php', 'Request.php', 'Router.php', 'hooks.php', 'derived.php', 'settings.php', 'auth.php', 'validation.php', 'variables.php', 'cron.php', 'functions.php', 'schema.php', 'files.php', 'cors.php'];
     $output[] = '// === FRAMEWORK ===';
     foreach ($srcOrder as $filename) {
@@ -71,14 +71,14 @@ function lightframe_build(string $projectDir, string $distDir): string
     // --- Parse types.yml and generate schema at build time ---
     require_once $projectDir . '/src/schema.php';
     $typesFile = $projectDir . '/config/types.yml';
-    $types = file_exists($typesFile) ? parse_types($typesFile) : [];
+    $types = file_exists($typesFile) ? _lf_parse_types($typesFile) : [];
 
     // Compile types config into output
     $output[] = '// === COMPILED TYPES ===';
     $output[] = '$TYPES = ' . var_export($types, true) . ';';
     $output[] = '';
 
-    // Compile derived and effects config (set by parse_types)
+    // Compile derived and effects config (set by _lf_parse_types)
     global $DERIVED, $EFFECTS;
     $output[] = '// === COMPILED DERIVED & EFFECTS ===';
     $output[] = '$DERIVED = ' . var_export($DERIVED ?? [], true) . ';';
@@ -146,7 +146,7 @@ function lightframe_build(string $projectDir, string $distDir): string
     $output[] = '$request = new Request();';
     $output[] = '';
     $output[] = '// Schema — sync from types config';
-    $output[] = 'schema_sync($db, $TYPES);';
+    $output[] = '_lf_schema_sync($db, $TYPES);';
     $output[] = '';
 
     // --- Auto-setup: create .htaccess and robots.txt on first run ---
@@ -189,7 +189,7 @@ function lightframe_build(string $projectDir, string $distDir): string
     require_once $projectDir . '/src/settings.php';
     $settingsFile = $projectDir . '/settings.yml';
     if (file_exists($settingsFile)) {
-        settings_load($settingsFile);
+        _lf_settings_load($settingsFile);
     }
     $output[] = '// === COMPILED SETTINGS ===';
     $output[] = '$_settings = ' . var_export($GLOBALS['_settings'], true) . ';';
@@ -197,12 +197,12 @@ function lightframe_build(string $projectDir, string $distDir): string
 
     // CORS (before cron, matching dev mode order)
     $output[] = '// CORS';
-    $output[] = 'if (cors_headers()) return;';
+    $output[] = 'if (_lf_cors_headers()) return;';
     $output[] = '';
 
     // Cron — check and run due tasks
     $output[] = '// Cron';
-    $output[] = 'cron_run();';
+    $output[] = '_lf_cron_run();';
     $output[] = '';
 
     // --- Dispatch ---
@@ -219,8 +219,8 @@ function lightframe_build(string $projectDir, string $distDir): string
     $output[] = '$ROUTES["auth_login"] = ["path" => "/api/auth/login", "handler" => "_auth_login", "method" => "POST", "auth" => "false"];';
     $output[] = '$ROUTES["auth_refresh"] = ["path" => "/api/auth/refresh", "handler" => "_auth_refresh", "method" => "POST", "auth" => "false"];';
     $output[] = '$ROUTES["auth_logout"] = ["path" => "/api/auth/logout", "handler" => "_auth_logout", "method" => "POST", "auth" => "false"];';
-    $output[] = '$ROUTES["file_serve"] = ["path" => "/api/files/:id", "handler" => "_file_serve", "method" => "GET", "auth" => "false"];';
-    $output[] = '$ROUTES["cron_run"] = ["path" => "/api/cron", "handler" => "_cron_run", "method" => "GET", "auth" => "false"];';
+    $output[] = '$ROUTES["_lf_file_serve"] = ["path" => "/api/files/:id", "handler" => "_lf_file_serve", "method" => "GET", "auth" => "false"];';
+    $output[] = '$ROUTES["_lf_cron_run"] = ["path" => "/api/cron", "handler" => "_lf_cron_run", "method" => "GET", "auth" => "false"];';
     $output[] = '';
 
     $output[] = '$router = new Router();';
@@ -248,8 +248,8 @@ function lightframe_build(string $projectDir, string $distDir): string
 
     // Auth middleware
     $output[] = '// Authenticate request';
-    $output[] = 'auth_authenticate_request();';
-    $output[] = '$authError = auth_check_route($matched_route);';
+    $output[] = '_lf_auth_authenticate_request();';
+    $output[] = '$authError = _lf_auth_check_route($matched_route);';
     $output[] = 'if ($authError) {';
     $output[] = '    echo json_encode($authError);';
     $output[] = '    return;';
@@ -263,16 +263,16 @@ function lightframe_build(string $projectDir, string $distDir): string
 
     // Built-in file handler
     $output[] = '// Built-in file handler';
-    $output[] = 'if ($handler_name === "_file_serve") {';
-    $output[] = '    file_serve((int) route_param("id"));';
+    $output[] = 'if ($handler_name === "_lf_file_serve") {';
+    $output[] = '    _lf_file_serve((int) route_param("id"));';
     $output[] = '    return;';
     $output[] = '}';
     $output[] = '';
 
     // Built-in cron handler
     $output[] = '// Built-in cron handler';
-    $output[] = 'if ($handler_name === "_cron_run") {';
-    $output[] = '    echo json_encode(cron_handle_run());';
+    $output[] = 'if ($handler_name === "_lf_cron_run") {';
+    $output[] = '    echo json_encode(_lf_cron_handle_run());';
     $output[] = '    return;';
     $output[] = '}';
     $output[] = '';
@@ -281,9 +281,9 @@ function lightframe_build(string $projectDir, string $distDir): string
     $output[] = '// Built-in auth handlers';
     $output[] = 'if (str_starts_with($handler_name, "_auth_")) {';
     $output[] = '    $result = match ($handler_name) {';
-    $output[] = '        "_auth_login" => auth_handle_login(),';
-    $output[] = '        "_auth_refresh" => auth_handle_refresh(),';
-    $output[] = '        "_auth_logout" => auth_handle_logout(),';
+    $output[] = '        "_auth_login" => _lf_auth_handle_login(),';
+    $output[] = '        "_auth_refresh" => _lf_auth_handle_refresh(),';
+    $output[] = '        "_auth_logout" => _lf_auth_handle_logout(),';
     $output[] = '        default => error(404, "Unknown auth handler"),';
     $output[] = '    };';
     $output[] = '    echo json_encode($result);';

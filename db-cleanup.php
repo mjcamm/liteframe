@@ -24,7 +24,7 @@ if (!file_exists($typesFile)) {
     echo "Error: config/types.yml not found\n";
     exit(1);
 }
-$types = parse_types($typesFile);
+$types = _lf_parse_types($typesFile);
 
 // Open database
 $dbPath = __DIR__ . '/data.db';

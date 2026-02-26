@@ -12,15 +12,15 @@ $_current_user = null;
 
 // --- JWT functions (no library needed) ---
 
-function jwt_encode(array $payload, string $secret): string
+function _lf_jwt_encode(array $payload, string $secret): string
 {
-    $header = base64url_encode(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
-    $payload = base64url_encode(json_encode($payload));
-    $signature = base64url_encode(hash_hmac('sha256', "{$header}.{$payload}", $secret, true));
+    $header = _lf_base64url_encode(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
+    $payload = _lf_base64url_encode(json_encode($payload));
+    $signature = _lf_base64url_encode(hash_hmac('sha256', "{$header}.{$payload}", $secret, true));
     return "{$header}.{$payload}.{$signature}";
 }
 
-function jwt_decode(string $token, string $secret): ?array
+function _lf_jwt_decode(string $token, string $secret): ?array
 {
     $parts = explode('.', $token);
     if (count($parts) !== 3) return null;
@@ -28,10 +28,10 @@ function jwt_decode(string $token, string $secret): ?array
     [$header, $payload, $signature] = $parts;
 
     // Verify signature
-    $expected = base64url_encode(hash_hmac('sha256', "{$header}.{$payload}", $secret, true));
+    $expected = _lf_base64url_encode(hash_hmac('sha256', "{$header}.{$payload}", $secret, true));
     if (!hash_equals($expected, $signature)) return null;
 
-    $data = json_decode(base64url_decode($payload), true);
+    $data = json_decode(_lf_base64url_decode($payload), true);
     if (!$data) return null;
 
     // Check expiry
@@ -40,19 +40,19 @@ function jwt_decode(string $token, string $secret): ?array
     return $data;
 }
 
-function base64url_encode(string $data): string
+function _lf_base64url_encode(string $data): string
 {
     return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
 }
 
-function base64url_decode(string $data): string
+function _lf_base64url_decode(string $data): string
 {
     return base64_decode(strtr($data, '-_', '+/'));
 }
 
 // --- Secret key management ---
 
-function auth_secret(): string
+function _lf_auth_secret(): string
 {
     global $db;
 
@@ -73,7 +73,7 @@ function auth_secret(): string
 
 // --- Parse duration strings (15m, 30d, 1h) ---
 
-function parse_duration(string $duration): int
+function _lf_parse_duration(string $duration): int
 {
     $value = (int) $duration;
     $unit = substr($duration, -1);
@@ -87,24 +87,24 @@ function parse_duration(string $duration): int
 
 // --- Token generation ---
 
-function auth_token(object $user): string
+function _lf_auth_token(object $user): string
 {
-    $secret = auth_secret();
+    $secret = _lf_auth_secret();
 
-    return jwt_encode([
+    return _lf_jwt_encode([
         'sub' => $user->id,
         'role' => $user->role ?? 'user',
-        'exp' => time() + parse_duration(setting('token_expiry', '15m')),
+        'exp' => time() + _lf_parse_duration(setting('token_expiry', '15m')),
     ], $secret);
 }
 
-function auth_refresh_token(object $user): string
+function _lf_auth_refresh_token(object $user): string
 {
     global $db;
 
     $token = bin2hex(random_bytes(32));
     $hash = hash('sha256', $token);
-    $expires = date('Y-m-d H:i:s', time() + parse_duration(setting('refresh_expiry', '30d')));
+    $expires = date('Y-m-d H:i:s', time() + _lf_parse_duration(setting('refresh_expiry', '30d')));
 
     $db->exec(
         'INSERT INTO _auth_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)',
@@ -116,13 +116,13 @@ function auth_refresh_token(object $user): string
 
 // --- Token validation ---
 
-function auth_validate_token(string $token): ?array
+function _lf_auth_validate_token(string $token): ?array
 {
-    $secret = auth_secret();
-    return jwt_decode($token, $secret);
+    $secret = _lf_auth_secret();
+    return _lf_jwt_decode($token, $secret);
 }
 
-function auth_validate_refresh(string $token): ?object
+function _lf_auth_validate_refresh(string $token): ?object
 {
     global $db;
 
@@ -135,7 +135,7 @@ function auth_validate_refresh(string $token): ?object
     return $row;
 }
 
-function auth_revoke_refresh(string $token): void
+function _lf_auth_revoke_refresh(string $token): void
 {
     global $db;
     $hash = hash('sha256', $token);
@@ -144,7 +144,7 @@ function auth_revoke_refresh(string $token): void
 
 // --- Internal: load user with password (for login verification only) ---
 
-function auth_load_user_by_email(string $email): ?object
+function _lf_auth_load_user_by_email(string $email): ?object
 {
     global $db;
     return $db->one(
@@ -155,12 +155,12 @@ function auth_load_user_by_email(string $email): ?object
 
 // --- Password helpers ---
 
-function auth_hash_password(string $password): string
+function _lf_auth_hash_password(string $password): string
 {
     return password_hash($password, PASSWORD_BCRYPT);
 }
 
-function auth_verify_password(string $password, string $hash): bool
+function _lf_auth_verify_password(string $password, string $hash): bool
 {
     return password_verify($password, $hash);
 }
@@ -177,7 +177,7 @@ function current_user(): ?object
  * Authenticate the current request from the Authorization header.
  * Called during dispatch, before the handler runs.
  */
-function auth_authenticate_request(): void
+function _lf_auth_authenticate_request(): void
 {
     global $_current_user;
 
@@ -185,7 +185,7 @@ function auth_authenticate_request(): void
     if (!str_starts_with($header, 'Bearer ')) return;
 
     $token = substr($header, 7);
-    $payload = auth_validate_token($token);
+    $payload = _lf_auth_validate_token($token);
     if (!$payload) return;
 
     $_current_user = entity_load($payload['sub']);
@@ -195,7 +195,7 @@ function auth_authenticate_request(): void
  * Check if the current request is authorized for a route.
  * Returns null if authorized, or an error array if not.
  */
-function auth_check_route(array $route): ?array
+function _lf_auth_check_route(array $route): ?array
 {
     $auth = $route['auth'] ?? 'false';
     $user = current_user();
@@ -227,7 +227,7 @@ function auth_check_route(array $route): ?array
 
 // --- Built-in auth handlers ---
 
-function auth_handle_login(): array
+function _lf_auth_handle_login(): array
 {
     $email = input('email');
     $password = input('password');
@@ -236,8 +236,8 @@ function auth_handle_login(): array
         return error(400, 'Email and password required');
     }
 
-    $user = auth_load_user_by_email($email);
-    if (!$user || !auth_verify_password($password, $user->password)) {
+    $user = _lf_auth_load_user_by_email($email);
+    if (!$user || !_lf_auth_verify_password($password, $user->password)) {
         return error(401, 'Invalid email or password');
     }
 
@@ -246,25 +246,25 @@ function auth_handle_login(): array
 
     return [
         'user' => $publicUser,
-        'token' => auth_token($user),
-        'refresh_token' => auth_refresh_token($user),
+        'token' => _lf_auth_token($user),
+        'refresh_token' => _lf_auth_refresh_token($user),
     ];
 }
 
-function auth_handle_refresh(): array
+function _lf_auth_handle_refresh(): array
 {
     $refreshToken = input('refresh_token');
     if (!$refreshToken) {
         return error(400, 'Refresh token required');
     }
 
-    $stored = auth_validate_refresh($refreshToken);
+    $stored = _lf_auth_validate_refresh($refreshToken);
     if (!$stored) {
         return error(401, 'Invalid or expired refresh token');
     }
 
     // Revoke old refresh token
-    auth_revoke_refresh($refreshToken);
+    _lf_auth_revoke_refresh($refreshToken);
 
     // Load user and issue new tokens
     $user = entity_load($stored->user_id);
@@ -273,16 +273,16 @@ function auth_handle_refresh(): array
     }
 
     return [
-        'token' => auth_token($user),
-        'refresh_token' => auth_refresh_token($user),
+        'token' => _lf_auth_token($user),
+        'refresh_token' => _lf_auth_refresh_token($user),
     ];
 }
 
-function auth_handle_logout(): array
+function _lf_auth_handle_logout(): array
 {
     $refreshToken = input('refresh_token');
     if ($refreshToken) {
-        auth_revoke_refresh($refreshToken);
+        _lf_auth_revoke_refresh($refreshToken);
     }
 
     return ['message' => 'Logged out'];

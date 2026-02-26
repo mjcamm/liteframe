@@ -30,7 +30,7 @@ class EntityQuery
 
     public function where(string $field, mixed $operatorOrValue = null, mixed $value = null): self
     {
-        validate_identifier($field);
+        _lf_validate_identifier($field);
         if (func_num_args() === 2) {
             // Two-arg: where('published', true) or where('field', null)
             if ($operatorOrValue === null) {
@@ -57,7 +57,7 @@ class EntityQuery
 
     public function sort(string $field, string $direction = 'asc'): self
     {
-        validate_identifier($field);
+        _lf_validate_identifier($field);
         $direction = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
         $this->orderBy = "{$field} {$direction}";
         return $this;
@@ -105,8 +105,8 @@ class EntityQuery
             if (hook_exists($this->entityType, 'on_load')) {
                 $entity = hook_fire($this->entityType, 'on_load', $entity);
             }
-            $entity = apply_derived($this->entityType, $entity);
-            $entity = file_resolve_entity($this->entityType, $entity);
+            $entity = _lf_apply_derived($this->entityType, $entity);
+            $entity = _lf_file_resolve_entity($this->entityType, $entity);
             if ($this->withRefs) {
                 $entity = $this->resolveRefs($entity);
             }
@@ -160,8 +160,8 @@ class EntityQuery
             if ($hasHook) {
                 $entity = hook_fire($this->entityType, 'on_load', $entity);
             }
-            $entity = apply_derived($this->entityType, $entity);
-            $entity = file_resolve_entity($this->entityType, $entity);
+            $entity = _lf_apply_derived($this->entityType, $entity);
+            $entity = _lf_file_resolve_entity($this->entityType, $entity);
         }
         return $results;
     }
@@ -202,7 +202,7 @@ class EntityQuery
 
     private function buildSql(): string
     {
-        $cols = entity_columns($this->entityType);
+        $cols = _lf_entity_columns($this->entityType);
         $sql = "SELECT {$cols} FROM {$this->table}";
 
         if ($this->wheres) {

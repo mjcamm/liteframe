@@ -13,7 +13,7 @@
  */
 
 require_once __DIR__ . '/src/settings.php';
-settings_load(__DIR__ . '/settings.yml');
+_lf_settings_load(__DIR__ . '/settings.yml');
 
 $command = $argv[1] ?? 'help';
 
@@ -148,7 +148,7 @@ function cmd_dev(): void
 
 function cmd_cron(): void
 {
-    // Minimal bootstrap: Database, variables, cron, derived (for functions_load)
+    // Minimal bootstrap: Database, variables, cron, derived (for _lf_functions_load)
     require_once __DIR__ . '/src/Database.php';
     require_once __DIR__ . '/src/variables.php';
     require_once __DIR__ . '/src/cron.php';
@@ -158,7 +158,7 @@ function cmd_cron(): void
     $db = new Database(__DIR__ . '/data.db');
 
     // Load user functions
-    functions_load(__DIR__ . '/functions');
+    _lf_functions_load(__DIR__ . '/functions');
 
     // Parse cron.yml
     $cronFile = __DIR__ . '/config/cron.yml';
@@ -190,7 +190,7 @@ function cmd_cron(): void
     }
 
     echo "Running all cron tasks...\n\n";
-    $results = cron_run_all();
+    $results = _lf_cron_run_all();
 
     foreach ($results as $name => $status) {
         $icon = $status === 'OK' ? '[OK]' : '[!!]';

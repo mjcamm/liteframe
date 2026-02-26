@@ -1,3 +1,11 @@
+# Define your content types here.
+#
+# Example:
+#   post:
+#     title: string, required=true
+#     body: richtext
+#     published: boolean, default=false
+
 user:
   email: email, required=true
   role: string, default=admin

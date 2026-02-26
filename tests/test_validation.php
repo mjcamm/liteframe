@@ -44,120 +44,120 @@ $db->exec('CREATE TABLE entities__article (
 $db->exec('CREATE TABLE entities__article__tags (article_id INTEGER, tag_id INTEGER, PRIMARY KEY (article_id, tag_id))');
 
 // --- Test 1: Required field missing on create ---
-$result = entity_validate('article', [], false);
+$result = _lf_entity_validate('article', [], false);
 assert($result !== null, 'Should fail validation');
 assert($result['error'] === 'Validation failed');
 assert($result['fields']['title'] === 'Required');
 echo "[PASS] Required field missing on create\n";
 
 // --- Test 2: Required field present and valid ---
-$result = entity_validate('article', ['title' => 'Hello'], false);
+$result = _lf_entity_validate('article', ['title' => 'Hello'], false);
 assert($result === null, 'Should pass validation');
 echo "[PASS] Required field present and valid\n";
 
 // --- Test 3: Required field with default — not required on create ---
-$result = entity_validate('article', ['title' => 'Hello'], false);
+$result = _lf_entity_validate('article', ['title' => 'Hello'], false);
 assert($result === null, 'published has default, not required');
 echo "[PASS] Required field with default not flagged\n";
 
 // --- Test 4: Optional field missing on create — passes ---
-$result = entity_validate('article', ['title' => 'Hello'], false);
+$result = _lf_entity_validate('article', ['title' => 'Hello'], false);
 assert($result === null);
 echo "[PASS] Optional fields not required\n";
 
 // --- Test 5: Partial update skips required check ---
-$result = entity_validate('article', ['id' => 1, 'body' => 'Updated body'], true);
+$result = _lf_entity_validate('article', ['id' => 1, 'body' => 'Updated body'], true);
 assert($result === null, 'Update with only optional field should pass');
 echo "[PASS] Partial update skips required check\n";
 
 // --- Test 6: Update with invalid field value ---
-$result = entity_validate('article', ['id' => 1, 'view_count' => 'abc'], true);
+$result = _lf_entity_validate('article', ['id' => 1, 'view_count' => 'abc'], true);
 assert($result !== null);
 assert($result['fields']['view_count'] === 'Must be an integer');
 echo "[PASS] Update with invalid value caught\n";
 
 // --- Test 7: Email validation ---
-$result = entity_validate('article', ['title' => 'Test', 'email' => 'valid@example.com'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'email' => 'valid@example.com'], false);
 assert($result === null);
 
-$result = entity_validate('article', ['title' => 'Test', 'email' => 'not-an-email'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'email' => 'not-an-email'], false);
 assert($result !== null);
 assert($result['fields']['email'] === 'Invalid email format');
 echo "[PASS] Email validation\n";
 
 // --- Test 8: Date validation ---
-$result = entity_validate('article', ['title' => 'Test', 'publish_date' => '2024-06-15'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'publish_date' => '2024-06-15'], false);
 assert($result === null);
 
-$result = entity_validate('article', ['title' => 'Test', 'publish_date' => '2024-02-30'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'publish_date' => '2024-02-30'], false);
 assert($result !== null);
 assert(str_contains($result['fields']['publish_date'], 'does not exist'));
 
-$result = entity_validate('article', ['title' => 'Test', 'publish_date' => 'not-a-date'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'publish_date' => 'not-a-date'], false);
 assert($result !== null);
 assert(str_contains($result['fields']['publish_date'], 'YYYY-MM-DD'));
 echo "[PASS] Date validation\n";
 
 // --- Test 9: Integer validation ---
-$result = entity_validate('article', ['title' => 'Test', 'view_count' => 123], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'view_count' => 123], false);
 assert($result === null);
 
-$result = entity_validate('article', ['title' => 'Test', 'view_count' => '456'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'view_count' => '456'], false);
 assert($result === null, '"456" is numeric and integer-like');
 
-$result = entity_validate('article', ['title' => 'Test', 'view_count' => 'abc'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'view_count' => 'abc'], false);
 assert($result !== null);
 assert($result['fields']['view_count'] === 'Must be an integer');
 
-$result = entity_validate('article', ['title' => 'Test', 'view_count' => 3.5], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'view_count' => 3.5], false);
 assert($result !== null);
 assert($result['fields']['view_count'] === 'Must be an integer');
 echo "[PASS] Integer validation\n";
 
 // --- Test 10: Number validation ---
-$result = entity_validate('article', ['title' => 'Test', 'rating' => 4.5], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'rating' => 4.5], false);
 assert($result === null);
 
-$result = entity_validate('article', ['title' => 'Test', 'rating' => 'abc'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'rating' => 'abc'], false);
 assert($result !== null);
 assert($result['fields']['rating'] === 'Must be a number');
 echo "[PASS] Number validation\n";
 
 // --- Test 11: Boolean validation ---
-$result = entity_validate('article', ['title' => 'Test', 'published' => true], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'published' => true], false);
 assert($result === null);
 
-$result = entity_validate('article', ['title' => 'Test', 'published' => 0], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'published' => 0], false);
 assert($result === null);
 
-$result = entity_validate('article', ['title' => 'Test', 'published' => 'false'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'published' => 'false'], false);
 assert($result === null);
 
-$result = entity_validate('article', ['title' => 'Test', 'published' => 'yes'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'published' => 'yes'], false);
 assert($result !== null);
 assert($result['fields']['published'] === 'Must be a boolean');
 echo "[PASS] Boolean validation\n";
 
 // --- Test 12: Enum validation ---
-$result = entity_validate('article', ['title' => 'Test', 'category' => 'news'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'category' => 'news'], false);
 assert($result === null);
 
-$result = entity_validate('article', ['title' => 'Test', 'category' => 'opinion'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'category' => 'opinion'], false);
 assert($result !== null);
 assert($result['fields']['category'] === 'Must be one of: news, tutorial, review');
 echo "[PASS] Enum validation\n";
 
 // --- Test 13: JSON validation ---
-$result = entity_validate('article', ['title' => 'Test', 'metadata' => '{"key": "value"}'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'metadata' => '{"key": "value"}'], false);
 assert($result === null);
 
-$result = entity_validate('article', ['title' => 'Test', 'metadata' => 'not json {'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'metadata' => 'not json {'], false);
 assert($result !== null);
 assert($result['fields']['metadata'] === 'Must be valid JSON');
 echo "[PASS] JSON validation\n";
 
 // --- Test 14: Type coercion ---
-$data = entity_coerce('article', ['view_count' => '123', 'rating' => '4.5', 'published' => 'true', 'cover' => '7']);
+$data = _lf_entity_coerce('article', ['view_count' => '123', 'rating' => '4.5', 'published' => 'true', 'cover' => '7']);
 assert($data['view_count'] === 123, 'String to int');
 assert($data['rating'] === 4.5, 'String to float');
 assert($data['published'] === 1, 'String true to 1');
@@ -165,13 +165,13 @@ assert($data['cover'] === 7, 'String file ID to int');
 echo "[PASS] Type coercion\n";
 
 // --- Test 15: Unknown field ---
-$result = entity_validate('article', ['title' => 'Test', 'nonexistent' => 'value'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'nonexistent' => 'value'], false);
 assert($result !== null);
 assert($result['fields']['nonexistent'] === 'Unknown field');
 echo "[PASS] Unknown field detected\n";
 
 // --- Test 16: Multiple errors at once ---
-$result = entity_validate('article', ['email' => 'bad', 'view_count' => 'abc', 'unknown_field' => 'x'], false);
+$result = _lf_entity_validate('article', ['email' => 'bad', 'view_count' => 'abc', 'unknown_field' => 'x'], false);
 assert($result !== null);
 assert(count($result['fields']) >= 3, 'Should have at least 3 errors');
 assert(isset($result['fields']['title']), 'Missing required title');
@@ -179,10 +179,10 @@ assert(isset($result['fields']['email']), 'Invalid email');
 assert(isset($result['fields']['view_count']), 'Invalid integer');
 echo "[PASS] Multiple errors returned at once\n";
 
-// --- Test 17: entity_validate standalone returns null on valid ---
-$result = entity_validate('article', ['title' => 'Valid Article'], false);
+// --- Test 17: _lf_entity_validate standalone returns null on valid ---
+$result = _lf_entity_validate('article', ['title' => 'Valid Article'], false);
 assert($result === null);
-echo "[PASS] entity_validate returns null on valid data\n";
+echo "[PASS] _lf_entity_validate returns null on valid data\n";
 
 // --- Test 18: entity_save integration — returns validation error ---
 $result = entity_save('article', ['view_count' => 'abc']);
@@ -199,52 +199,52 @@ assert($article->view_count == 42, 'Coerced integer');
 echo "[PASS] entity_save with valid data saves and coerces\n";
 
 // --- Test 20: Reference field validation ---
-$result = entity_validate('article', ['title' => 'Test', 'author' => 'not-a-number'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'author' => 'not-a-number'], false);
 assert($result !== null);
 assert($result['fields']['author'] === 'Must be a valid entity ID');
 
-$result = entity_validate('article', ['title' => 'Test', 'author' => 5], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'author' => 5], false);
 assert($result === null);
 echo "[PASS] Reference field validation\n";
 
 // --- Test 21: Reference many validation ---
-$result = entity_validate('article', ['title' => 'Test', 'tags' => 'not-array'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'tags' => 'not-array'], false);
 assert($result !== null);
 assert($result['fields']['tags'] === 'Must be an array of IDs');
 
-$result = entity_validate('article', ['title' => 'Test', 'tags' => [1, 'abc']], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'tags' => [1, 'abc']], false);
 assert($result !== null);
 assert($result['fields']['tags'] === 'Must be an array of numeric IDs');
 
-$result = entity_validate('article', ['title' => 'Test', 'tags' => [1, 2, 3]], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'tags' => [1, 2, 3]], false);
 assert($result === null);
 echo "[PASS] Reference many validation\n";
 
 // --- Test 22: User password not flagged as unknown ---
-$result = entity_validate('user', ['name' => 'Alice', 'email' => 'alice@test.com', 'password' => 'secret'], false);
+$result = _lf_entity_validate('user', ['name' => 'Alice', 'email' => 'alice@test.com', 'password' => 'secret'], false);
 assert($result === null, 'Password should not be flagged as unknown');
 echo "[PASS] User password not flagged as unknown field\n";
 
 // --- Test 23: String type rejects arrays ---
-$result = entity_validate('article', ['title' => ['nested', 'array']], false);
+$result = _lf_entity_validate('article', ['title' => ['nested', 'array']], false);
 assert($result !== null);
 assert($result['fields']['title'] === 'Must be a string');
 echo "[PASS] String field rejects array value\n";
 
 // --- Test 24: Datetime validation ---
-$result = entity_validate('article', ['title' => 'Test', 'updated_on' => '2024-06-15 14:30:00'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'updated_on' => '2024-06-15 14:30:00'], false);
 assert($result === null);
 
-$result = entity_validate('article', ['title' => 'Test', 'updated_on' => '2024-06-15T14:30:00Z'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'updated_on' => '2024-06-15T14:30:00Z'], false);
 assert($result === null, 'ISO 8601 should work');
 
-$result = entity_validate('article', ['title' => 'Test', 'updated_on' => 'not-a-datetime'], false);
+$result = _lf_entity_validate('article', ['title' => 'Test', 'updated_on' => 'not-a-datetime'], false);
 assert($result !== null);
 assert($result['fields']['updated_on'] === 'Invalid datetime format');
 echo "[PASS] Datetime validation\n";
 
 // --- Test 25: Unknown type skips validation ---
-$result = entity_validate('nonexistent', ['anything' => 'goes'], false);
+$result = _lf_entity_validate('nonexistent', ['anything' => 'goes'], false);
 assert($result === null, 'Unknown type should skip validation');
 echo "[PASS] Unknown type skips validation\n";
 

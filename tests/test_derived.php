@@ -15,10 +15,10 @@ echo "=== Derived & Effects Tests ===\n\n";
 
 // Bootstrap
 $db = new Database(':memory:');
-settings_load(__DIR__ . '/../settings.yml');
-functions_load(__DIR__ . '/../functions');
-$TYPES = parse_types(__DIR__ . '/../config/types.yml');
-schema_sync($db, $TYPES);
+_lf_settings_load(__DIR__ . '/../settings.yml');
+_lf_functions_load(__DIR__ . '/fixtures/functions');
+$TYPES = _lf_parse_types(__DIR__ . '/fixtures/types.yml');
+_lf_schema_sync($db, $TYPES);
 
 // --- Test 1: Derived computed on load ---
 $article = entity_save('article', ['title' => 'Hello World', 'body' => 'Some content here']);

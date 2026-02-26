@@ -1,0 +1,28 @@
+# Database
+data.db
+data.db.*
+
+# Build output
+dist/
+
+# Uploaded files
+files/public/*
+files/protected/*
+!files/public/.gitkeep
+!files/protected/.gitkeep
+
+# Frontend (user creates their own)
+frontend/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env

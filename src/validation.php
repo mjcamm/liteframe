@@ -20,7 +20,7 @@ function validation_error(array $fields): array
 
 // --- Coerce data types before validation ---
 
-function entity_coerce(string $type, array $data): array
+function _lf_entity_coerce(string $type, array $data): array
 {
     global $TYPES;
     $typeFields = $TYPES[$type] ?? [];
@@ -34,7 +34,7 @@ function entity_coerce(string $type, array $data): array
         $data[$key] = match ($baseType) {
             'integer', 'file' => is_numeric($value) ? (int) $value : $value,
             'number' => is_numeric($value) ? (float) $value : $value,
-            'boolean' => coerce_boolean($value),
+            'boolean' => _lf_coerce_boolean($value),
             default => $value,
         };
     }
@@ -42,7 +42,7 @@ function entity_coerce(string $type, array $data): array
     return $data;
 }
 
-function coerce_boolean(mixed $value): mixed
+function _lf_coerce_boolean(mixed $value): mixed
 {
     if ($value === true || $value === 'true' || $value === '1' || $value === 1) return 1;
     if ($value === false || $value === 'false' || $value === '0' || $value === 0) return 0;
@@ -51,7 +51,7 @@ function coerce_boolean(mixed $value): mixed
 
 // --- Validate entity data against type definition ---
 
-function entity_validate(string $type, array $data, bool $is_update = false): ?array
+function _lf_entity_validate(string $type, array $data, bool $is_update = false): ?array
 {
     global $TYPES;
     $typeFields = $TYPES[$type] ?? null;
@@ -63,7 +63,7 @@ function entity_validate(string $type, array $data, bool $is_update = false): ?a
         // Reference many — validated separately
         if ($field['reference_many']) {
             if (array_key_exists($fieldName, $data)) {
-                $err = validate_reference_many($data[$fieldName]);
+                $err = _lf_validate_reference_many($data[$fieldName]);
                 if ($err !== null) $errors[$fieldName] = $err;
             }
             continue;
@@ -87,7 +87,7 @@ function entity_validate(string $type, array $data, bool $is_update = false): ?a
         if ($value === null || $value === '') continue;
 
         // Type-specific validation
-        $fieldError = validate_field_type($value, $field['type']);
+        $fieldError = _lf_validate_field_type($value, $field['type']);
         if ($fieldError !== null) {
             $errors[$fieldName] = $fieldError;
         }
@@ -108,7 +108,7 @@ function entity_validate(string $type, array $data, bool $is_update = false): ?a
 
 // --- Type-specific validation dispatcher ---
 
-function validate_field_type(mixed $value, string $type): ?string
+function _lf_validate_field_type(mixed $value, string $type): ?string
 {
     $options = [];
     $baseType = $type;
@@ -118,24 +118,24 @@ function validate_field_type(mixed $value, string $type): ?string
     }
 
     return match ($baseType) {
-        'string', 'text', 'richtext' => validate_string($value),
-        'email' => validate_email($value),
-        'date' => validate_date($value),
-        'datetime' => validate_datetime($value),
-        'integer' => validate_integer($value),
-        'number' => validate_number($value),
-        'boolean' => validate_boolean($value),
-        'enum' => validate_enum($value, $options),
-        'json' => validate_json($value),
-        'file' => validate_file_id($value),
-        'reference' => validate_reference($value),
+        'string', 'text', 'richtext' => _lf_validate_string($value),
+        'email' => _lf_validate_email($value),
+        'date' => _lf_validate_date($value),
+        'datetime' => _lf_validate_datetime($value),
+        'integer' => _lf_validate_integer($value),
+        'number' => _lf_validate_number($value),
+        'boolean' => _lf_validate_boolean($value),
+        'enum' => _lf_validate_enum($value, $options),
+        'json' => _lf_validate_json($value),
+        'file' => _lf_validate_file_id($value),
+        'reference' => _lf_validate_reference($value),
         default => null,
     };
 }
 
 // --- Individual validators ---
 
-function validate_string(mixed $value): ?string
+function _lf_validate_string(mixed $value): ?string
 {
     if (is_array($value) || is_object($value)) {
         return 'Must be a string';
@@ -143,7 +143,7 @@ function validate_string(mixed $value): ?string
     return null;
 }
 
-function validate_email(mixed $value): ?string
+function _lf_validate_email(mixed $value): ?string
 {
     if (!is_string($value) || !filter_var($value, FILTER_VALIDATE_EMAIL)) {
         return 'Invalid email format';
@@ -151,7 +151,7 @@ function validate_email(mixed $value): ?string
     return null;
 }
 
-function validate_date(mixed $value): ?string
+function _lf_validate_date(mixed $value): ?string
 {
     if (!is_string($value) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
         return 'Invalid date format (expected YYYY-MM-DD)';
@@ -163,7 +163,7 @@ function validate_date(mixed $value): ?string
     return null;
 }
 
-function validate_datetime(mixed $value): ?string
+function _lf_validate_datetime(mixed $value): ?string
 {
     if (!is_string($value) || strtotime($value) === false) {
         return 'Invalid datetime format';
@@ -171,7 +171,7 @@ function validate_datetime(mixed $value): ?string
     return null;
 }
 
-function validate_integer(mixed $value): ?string
+function _lf_validate_integer(mixed $value): ?string
 {
     if (!is_numeric($value) || (float) $value != (int) $value) {
         return 'Must be an integer';
@@ -179,7 +179,7 @@ function validate_integer(mixed $value): ?string
     return null;
 }
 
-function validate_number(mixed $value): ?string
+function _lf_validate_number(mixed $value): ?string
 {
     if (!is_numeric($value)) {
         return 'Must be a number';
@@ -187,7 +187,7 @@ function validate_number(mixed $value): ?string
     return null;
 }
 
-function validate_boolean(mixed $value): ?string
+function _lf_validate_boolean(mixed $value): ?string
 {
     $allowed = [true, false, 0, 1, '0', '1', 'true', 'false'];
     if (!in_array($value, $allowed, true)) {
@@ -196,7 +196,7 @@ function validate_boolean(mixed $value): ?string
     return null;
 }
 
-function validate_enum(mixed $value, array $options): ?string
+function _lf_validate_enum(mixed $value, array $options): ?string
 {
     if (!in_array((string) $value, $options, true)) {
         return 'Must be one of: ' . implode(', ', $options);
@@ -204,7 +204,7 @@ function validate_enum(mixed $value, array $options): ?string
     return null;
 }
 
-function validate_json(mixed $value): ?string
+function _lf_validate_json(mixed $value): ?string
 {
     if (!is_string($value)) return 'Must be valid JSON';
     json_decode($value);
@@ -214,7 +214,7 @@ function validate_json(mixed $value): ?string
     return null;
 }
 
-function validate_file_id(mixed $value): ?string
+function _lf_validate_file_id(mixed $value): ?string
 {
     if (!is_numeric($value)) {
         return 'Must be a valid file ID';
@@ -222,7 +222,7 @@ function validate_file_id(mixed $value): ?string
     return null;
 }
 
-function validate_reference(mixed $value): ?string
+function _lf_validate_reference(mixed $value): ?string
 {
     if (!is_numeric($value)) {
         return 'Must be a valid entity ID';
@@ -230,7 +230,7 @@ function validate_reference(mixed $value): ?string
     return null;
 }
 
-function validate_reference_many(mixed $value): ?string
+function _lf_validate_reference_many(mixed $value): ?string
 {
     if (!is_array($value)) {
         return 'Must be an array of IDs';

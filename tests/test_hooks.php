@@ -13,11 +13,11 @@ echo "=== Hook Tests ===\n\n";
 
 // Bootstrap
 $db = new Database(':memory:');
-$types = parse_types(__DIR__ . '/../config/types.yml');
-schema_apply($db, $types);
+$types = _lf_parse_types(__DIR__ . '/fixtures/types.yml');
+_lf_schema_apply($db, $types);
 
 // Load hooks
-hooks_load(__DIR__ . '/../hooks');
+_lf_hooks_load(__DIR__ . '/../hooks');
 
 // Test 1: before_create hook can modify data
 global $_hooks;

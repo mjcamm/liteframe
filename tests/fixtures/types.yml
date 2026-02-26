@@ -1,0 +1,24 @@
+# Test types — safe to delete along with the entire tests/ directory.
+
+user:
+  name: string, required=true
+  email: email, required=true
+  role: string, default=user
+
+article:
+  title: string, required=true
+  body: richtext
+  published: boolean, default=false
+  author: -> user
+  tags: -> tag[]
+  featured_image: file, public=true
+  document: file
+  $derived(slug): slugify
+  $derived(reading_time): reading_time
+
+page:
+  title: string, required=true
+  slug: string
+
+tag:
+  name: string, required=true

@@ -18,7 +18,7 @@ $CRONS = [];
  * Check and run any due cron tasks. Called every request.
  * Returns immediately if no tasks are configured.
  */
-function cron_run(): void
+function _lf_cron_run(): void
 {
     global $CRONS;
     if (empty($CRONS)) return;
@@ -30,7 +30,7 @@ function cron_run(): void
         $interval = (int) $task['every'] * 60;
 
         if (($now - $lastRun) >= $interval) {
-            cron_run_task($name, $task);
+            _lf_cron_run_task($name, $task);
         }
     }
 }
@@ -38,7 +38,7 @@ function cron_run(): void
 /**
  * Execute a single cron task. Updates last_run, tracks errors.
  */
-function cron_run_task(string $name, array $task): bool
+function _lf_cron_run_task(string $name, array $task): bool
 {
     $fn = $task['function'];
 
@@ -63,7 +63,7 @@ function cron_run_task(string $name, array $task): bool
  * Built-in HTTP handler for /api/cron?key=...
  * Checks cron_key from settings, runs all tasks, returns JSON.
  */
-function cron_handle_run(): array
+function _lf_cron_handle_run(): array
 {
     $key = setting('cron_key', '');
     if ($key === '') {
@@ -77,20 +77,20 @@ function cron_handle_run(): array
         return ['error' => 'Invalid cron key'];
     }
 
-    return ['results' => cron_run_all()];
+    return ['results' => _lf_cron_run_all()];
 }
 
 /**
  * Run ALL tasks ignoring timing. For CLI use.
  * Returns ['task_name' => 'OK'|'FAILED: reason'].
  */
-function cron_run_all(): array
+function _lf_cron_run_all(): array
 {
     global $CRONS;
     $results = [];
 
     foreach ($CRONS as $name => $task) {
-        $ok = cron_run_task($name, $task);
+        $ok = _lf_cron_run_task($name, $task);
         if ($ok) {
             $results[$name] = 'OK';
         } else {

@@ -15,10 +15,10 @@ echo "=== File Upload Tests ===\n\n";
 
 // Bootstrap
 $db = new Database(':memory:');
-settings_load(__DIR__ . '/../settings.yml');
-functions_load(__DIR__ . '/../functions');
-$TYPES = parse_types(__DIR__ . '/../config/types.yml');
-schema_sync($db, $TYPES);
+_lf_settings_load(__DIR__ . '/../settings.yml');
+_lf_functions_load(__DIR__ . '/fixtures/functions');
+$TYPES = _lf_parse_types(__DIR__ . '/fixtures/types.yml');
+_lf_schema_sync($db, $TYPES);
 
 // Use a temp directory for file storage during tests
 $testDir = sys_get_temp_dir() . '/lightframe_test_' . uniqid();
@@ -26,17 +26,17 @@ mkdir($testDir . '/files/public', 0755, true);
 mkdir($testDir . '/files/protected', 0755, true);
 define('LIGHTFRAME_PROJECT_DIR', $testDir);
 
-// --- Test 1: parse_field recognizes file type ---
-$f = parse_field('file');
+// --- Test 1: _lf_parse_field recognizes file type ---
+$f = _lf_parse_field('file');
 assert($f['type'] === 'file' && $f['public'] === false);
-echo "[PASS] parse_field('file') — type=file, public=false\n";
+echo "[PASS] _lf_parse_field('file') — type=file, public=false\n";
 
-$f = parse_field('file, public=true');
+$f = _lf_parse_field('file, public=true');
 assert($f['type'] === 'file' && $f['public'] === true);
-echo "[PASS] parse_field('file, public=true') — public=true\n";
+echo "[PASS] _lf_parse_field('file, public=true') — public=true\n";
 
 // --- Test 2: file field maps to INTEGER in SQLite ---
-assert(field_to_sqlite('file') === 'INTEGER');
+assert(_lf_field_to_sqlite('file') === 'INTEGER');
 echo "[PASS] file maps to INTEGER column\n";
 
 // --- Test 3: _files table exists ---
@@ -44,7 +44,7 @@ $tables = $db->all("SELECT name FROM sqlite_master WHERE type='table' AND name='
 assert(count($tables) === 1);
 echo "[PASS] _files table created\n";
 
-// --- Test 4: file_validate — valid file ---
+// --- Test 4: _lf_file_validate — valid file ---
 $fakeFile = [
     'name' => 'test.jpg',
     'type' => 'image/jpeg',
@@ -53,30 +53,30 @@ $fakeFile = [
     'size' => 1024,
 ];
 file_put_contents($fakeFile['tmp_name'], str_repeat('x', 1024));
-$error = file_validate($fakeFile);
+$error = _lf_file_validate($fakeFile);
 assert($error === null, 'Valid file should pass validation');
-echo "[PASS] file_validate — valid jpg passes\n";
+echo "[PASS] _lf_file_validate — valid jpg passes\n";
 
-// --- Test 5: file_validate — disallowed extension ---
+// --- Test 5: _lf_file_validate — disallowed extension ---
 $badFile = $fakeFile;
 $badFile['name'] = 'test.exe';
-$error = file_validate($badFile);
+$error = _lf_file_validate($badFile);
 assert($error !== null && str_contains($error, '.exe'));
-echo "[PASS] file_validate — .exe rejected: {$error}\n";
+echo "[PASS] _lf_file_validate — .exe rejected: {$error}\n";
 
-// --- Test 6: file_validate — too large ---
+// --- Test 6: _lf_file_validate — too large ---
 $bigFile = $fakeFile;
 $bigFile['size'] = 999 * 1024 * 1024; // 999MB
-$error = file_validate($bigFile);
+$error = _lf_file_validate($bigFile);
 assert($error !== null && str_contains($error, 'size'));
-echo "[PASS] file_validate — oversized rejected: {$error}\n";
+echo "[PASS] _lf_file_validate — oversized rejected: {$error}\n";
 
-// --- Test 7: parse_file_size ---
-assert(parse_file_size('10M') === 10 * 1024 * 1024);
-assert(parse_file_size('1K') === 1024);
-assert(parse_file_size('2G') === 2 * 1024 * 1024 * 1024);
-assert(parse_file_size('500') === 500);
-echo "[PASS] parse_file_size works\n";
+// --- Test 7: _lf_parse_file_size ---
+assert(_lf_parse_file_size('10M') === 10 * 1024 * 1024);
+assert(_lf_parse_file_size('1K') === 1024);
+assert(_lf_parse_file_size('2G') === 2 * 1024 * 1024 * 1024);
+assert(_lf_parse_file_size('500') === 500);
+echo "[PASS] _lf_parse_file_size works\n";
 
 // --- Test 8: file_store — public file ---
 $publicFile = [
@@ -134,24 +134,24 @@ assert(!file_exists($diskPath), 'File should be deleted from disk');
 assert($db->one('SELECT id FROM _files WHERE id = ?', [$fileId]) === null, 'Row should be deleted');
 echo "[PASS] file_delete — removed from disk and DB\n";
 
-// --- Test 12: file_resolve_entity — resolves file IDs on loaded entity ---
+// --- Test 12: _lf_file_resolve_entity — resolves file IDs on loaded entity ---
 // Create an article with a file ID manually
 $article = entity_save('article', ['title' => 'With File', 'body' => 'test']);
-// Manually set file field (normally done by file_process_uploads)
+// Manually set file field (normally done by _lf_file_process_uploads)
 $db->exec('UPDATE entities__article SET document = ? WHERE id = ?', [$protectedId, $article->id]);
 $loaded = entity_load($article->id);
 assert(is_object($loaded->document), 'File field should be resolved to object');
 assert($loaded->document->filename === 'secret.pdf');
 assert($loaded->document->url === '/api/files/' . $protectedId);
-echo "[PASS] file_resolve_entity — file ID resolved on load\n";
+echo "[PASS] _lf_file_resolve_entity — file ID resolved on load\n";
 
-// --- Test 13: file_resolve_entity via entity_query ---
+// --- Test 13: _lf_file_resolve_entity via entity_query ---
 $queried = entity_query('article')->first();
 assert(is_object($queried->document));
 assert($queried->document->filename === 'secret.pdf');
-echo "[PASS] file_resolve_entity — works via entity_query\n";
+echo "[PASS] _lf_file_resolve_entity — works via entity_query\n";
 
-// --- Test 14: file_cleanup_entity — deletes all files for an entity ---
+// --- Test 14: _lf_file_cleanup_entity — deletes all files for an entity ---
 $cleanupFile = [
     'name' => 'cleanup.jpg',
     'type' => 'image/jpeg',
@@ -164,10 +164,10 @@ $cleanupId = file_store($cleanupFile, 'public', 'article', $article->id, 'featur
 $filesBefore = $db->all('SELECT id FROM _files WHERE entity_type = ? AND entity_id = ?', ['article', $article->id]);
 assert(count($filesBefore) === 2, 'Should have 2 files');
 
-file_cleanup_entity('article', $article->id);
+_lf_file_cleanup_entity('article', $article->id);
 $filesAfter = $db->all('SELECT id FROM _files WHERE entity_type = ? AND entity_id = ?', ['article', $article->id]);
 assert(count($filesAfter) === 0, 'All files should be cleaned up');
-echo "[PASS] file_cleanup_entity — removed all files\n";
+echo "[PASS] _lf_file_cleanup_entity — removed all files\n";
 
 // --- Test 15: entity_delete cleans up files ---
 $article2 = entity_save('article', ['title' => 'Delete Me', 'body' => 'test']);

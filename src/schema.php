@@ -8,7 +8,7 @@
 
 // --- Field type to SQLite column mapping ---
 
-function field_to_sqlite(string $type): string
+function _lf_field_to_sqlite(string $type): string
 {
     // Strip enum values for matching: enum(a,b,c) → enum
     $baseType = preg_replace('/\(.*\)/', '', $type);
@@ -32,7 +32,7 @@ function field_to_sqlite(string $type): string
 
 // --- Parse a field definition string ---
 
-function parse_field(string $definition): array
+function _lf_parse_field(string $definition): array
 {
     $field = [
         'type' => null,
@@ -85,7 +85,7 @@ function parse_field(string $definition): array
 
 // --- Parse types.yml content ---
 
-function parse_types(string $file): array
+function _lf_parse_types(string $file): array
 {
     global $DERIVED, $EFFECTS;
     $DERIVED = [];
@@ -120,7 +120,7 @@ function parse_types(string $file): array
             if (str_starts_with($trimmed, '$')) continue;
 
             [$name, $definition] = explode(':', $line, 2);
-            $types[$currentType][trim($name)] = parse_field(trim($definition));
+            $types[$currentType][trim($name)] = _lf_parse_field(trim($definition));
         }
     }
 
@@ -129,7 +129,7 @@ function parse_types(string $file): array
 
 // --- Generate SQL from parsed types ---
 
-function generate_schema(array $types): array
+function _lf_generate_schema(array $types): array
 {
     $statements = [];
 
@@ -195,7 +195,7 @@ function generate_schema(array $types): array
             }
 
             // Regular field
-            $col = $fieldName . ' ' . field_to_sqlite($field['type']);
+            $col = $fieldName . ' ' . _lf_field_to_sqlite($field['type']);
 
             if ($field['required']) {
                 $col .= ' NOT NULL';
@@ -245,21 +245,21 @@ function generate_schema(array $types): array
 
 // --- Run schema against database ---
 
-function schema_apply(Database $db, array $types): void
+function _lf_schema_apply(Database $db, array $types): void
 {
-    schema_sync($db, $types);
+    _lf_schema_sync($db, $types);
 }
 
 // --- Schema fingerprint ---
 
-function schema_fingerprint(array $types): string
+function _lf_schema_fingerprint(array $types): string
 {
     return md5(serialize($types));
 }
 
 // --- Safe default for ADD COLUMN ---
 
-function field_default_for_sqlite(string $sqliteType): string
+function _lf_field_default_for_sqlite(string $sqliteType): string
 {
     return match ($sqliteType) {
         'INTEGER' => '0',
@@ -270,13 +270,13 @@ function field_default_for_sqlite(string $sqliteType): string
 
 // --- Column definition for ALTER TABLE ADD COLUMN ---
 
-function column_definition_for_alter(string $fieldName, array $field): string
+function _lf_column_definition_for_alter(string $fieldName, array $field): string
 {
     if ($field['type'] === 'reference') {
         return "{$fieldName} INTEGER";
     }
 
-    $sqliteType = field_to_sqlite($field['type']);
+    $sqliteType = _lf_field_to_sqlite($field['type']);
     $col = "{$fieldName} {$sqliteType}";
 
     if ($field['required']) {
@@ -291,7 +291,7 @@ function column_definition_for_alter(string $fieldName, array $field): string
                 $col .= " DEFAULT '{$default}'";
             }
         } else {
-            $col .= ' DEFAULT ' . field_default_for_sqlite($sqliteType);
+            $col .= ' DEFAULT ' . _lf_field_default_for_sqlite($sqliteType);
         }
     } elseif ($field['default'] !== null) {
         $default = $field['default'];
@@ -309,7 +309,7 @@ function column_definition_for_alter(string $fieldName, array $field): string
 
 // --- Automatic schema sync ---
 
-function schema_sync(Database $db, array $types): void
+function _lf_schema_sync(Database $db, array $types): void
 {
     // 1. Create system tables (idempotent)
     $db->exec('CREATE TABLE IF NOT EXISTS _entities (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL)');
@@ -319,8 +319,8 @@ function schema_sync(Database $db, array $types): void
     $db->exec('CREATE TABLE IF NOT EXISTS _files (id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT NOT NULL, stored_name TEXT NOT NULL, mime_type TEXT NOT NULL, size INTEGER NOT NULL, storage TEXT NOT NULL, entity_type TEXT, entity_id INTEGER, field TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)');
 
     // 2. Fingerprint check — skip if unchanged (fast path)
-    $fingerprint = schema_fingerprint($types);
-    $stored = $db->one("SELECT value FROM _config WHERE key = 'schema_fingerprint'");
+    $fingerprint = _lf_schema_fingerprint($types);
+    $stored = $db->one("SELECT value FROM _config WHERE key = '_lf_schema_fingerprint'");
     if ($stored && $stored->value === $fingerprint) {
         return;
     }
@@ -329,7 +329,7 @@ function schema_sync(Database $db, array $types): void
     foreach ($types as $typeName => $fields) {
         $table = 'entities__' . $typeName;
 
-        // Build CREATE TABLE (same logic as generate_schema)
+        // Build CREATE TABLE (same logic as _lf_generate_schema)
         $columns = ['id INTEGER PRIMARY KEY'];
         foreach ($fields as $fieldName => $field) {
             if ($field['reference_many']) continue;
@@ -337,7 +337,7 @@ function schema_sync(Database $db, array $types): void
                 $columns[] = "{$fieldName} INTEGER";
                 continue;
             }
-            $col = $fieldName . ' ' . field_to_sqlite($field['type']);
+            $col = $fieldName . ' ' . _lf_field_to_sqlite($field['type']);
             if ($field['required']) {
                 $col .= ' NOT NULL';
             }
@@ -369,7 +369,7 @@ function schema_sync(Database $db, array $types): void
             if ($field['reference_many']) continue;
             if (in_array($fieldName, $existingNames)) continue;
 
-            $colDef = column_definition_for_alter($fieldName, $field);
+            $colDef = _lf_column_definition_for_alter($fieldName, $field);
             try {
                 $db->exec("ALTER TABLE {$table} ADD COLUMN {$colDef}");
             } catch (\Exception $e) {
@@ -391,5 +391,5 @@ function schema_sync(Database $db, array $types): void
     }
 
     // 5. Store fingerprint
-    $db->exec("INSERT OR REPLACE INTO _config (key, value) VALUES ('schema_fingerprint', ?)", [$fingerprint]);
+    $db->exec("INSERT OR REPLACE INTO _config (key, value) VALUES ('_lf_schema_fingerprint', ?)", [$fingerprint]);
 }

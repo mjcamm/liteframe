@@ -2,7 +2,7 @@
 
 // Settings must load first — controls dev mode and everything else
 require_once __DIR__ . '/src/settings.php';
-settings_load(__DIR__ . '/settings.yml');
+_lf_settings_load(__DIR__ . '/settings.yml');
 
 if (setting('dev_mode', false)) {
     error_reporting(E_ALL);
@@ -77,15 +77,15 @@ $db = new Database(__DIR__ . '/data.db');
 $request = new Request();
 
 // Schema from types.yml
-$TYPES = parse_types(__DIR__ . '/config/types.yml');
-schema_apply($db, $TYPES);
+$TYPES = _lf_parse_types(__DIR__ . '/config/types.yml');
+_lf_schema_apply($db, $TYPES);
 
 // CORS
-if (cors_headers()) return;
+if (_lf_cors_headers()) return;
 
 // Load hooks and user functions
-hooks_load(__DIR__ . '/hooks');
-functions_load(__DIR__ . '/functions');
+_lf_hooks_load(__DIR__ . '/hooks');
+_lf_functions_load(__DIR__ . '/functions');
 
 // Cron — parse config and run due tasks
 $cronFile = __DIR__ . '/config/cron.yml';
@@ -105,7 +105,7 @@ if (file_exists($cronFile)) {
         }
     }
 }
-cron_run();
+_lf_cron_run();
 
 // Parse routes (paths auto-prefixed with /api)
 $routes = [];
@@ -131,8 +131,8 @@ if (file_exists($routesFile)) {
 $routes['auth_login'] = ['path' => '/api/auth/login', 'handler' => '_auth_login', 'method' => 'POST', 'auth' => 'false'];
 $routes['auth_refresh'] = ['path' => '/api/auth/refresh', 'handler' => '_auth_refresh', 'method' => 'POST', 'auth' => 'false'];
 $routes['auth_logout'] = ['path' => '/api/auth/logout', 'handler' => '_auth_logout', 'method' => 'POST', 'auth' => 'false'];
-$routes['file_serve'] = ['path' => '/api/files/:id', 'handler' => '_file_serve', 'method' => 'GET', 'auth' => 'false'];
-$routes['cron_run'] = ['path' => '/api/cron', 'handler' => '_cron_run', 'method' => 'GET', 'auth' => 'false'];
+$routes['_lf_file_serve'] = ['path' => '/api/files/:id', 'handler' => '_lf_file_serve', 'method' => 'GET', 'auth' => 'false'];
+$routes['_lf_cron_run'] = ['path' => '/api/cron', 'handler' => '_lf_cron_run', 'method' => 'GET', 'auth' => 'false'];
 
 $router = new Router();
 foreach ($routes as $name => $route) {
@@ -164,10 +164,10 @@ if (!$matched_route) {
 }
 
 // Authenticate request (reads JWT from Authorization header)
-auth_authenticate_request();
+_lf_auth_authenticate_request();
 
 // Check route auth
-$authError = auth_check_route($matched_route);
+$authError = _lf_auth_check_route($matched_route);
 if ($authError) {
     echo json_encode($authError);
     return;
@@ -177,23 +177,23 @@ if ($authError) {
 $handler_name = $matched_route['handler'];
 try {
     // Built-in file handler
-    if ($handler_name === '_file_serve') {
-        file_serve((int) route_param('id'));
+    if ($handler_name === '_lf_file_serve') {
+        _lf_file_serve((int) route_param('id'));
         return;
     }
 
     // Built-in cron handler
-    if ($handler_name === '_cron_run') {
-        echo json_encode(cron_handle_run());
+    if ($handler_name === '_lf_cron_run') {
+        echo json_encode(_lf_cron_handle_run());
         return;
     }
 
     // Built-in auth handlers
     if (str_starts_with($handler_name, '_auth_')) {
         $result = match ($handler_name) {
-            '_auth_login' => auth_handle_login(),
-            '_auth_refresh' => auth_handle_refresh(),
-            '_auth_logout' => auth_handle_logout(),
+            '_auth_login' => _lf_auth_handle_login(),
+            '_auth_refresh' => _lf_auth_handle_refresh(),
+            '_auth_logout' => _lf_auth_handle_logout(),
             default => error(404, 'Unknown auth handler'),
         };
         echo json_encode($result);

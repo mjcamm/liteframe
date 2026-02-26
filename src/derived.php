@@ -17,7 +17,7 @@ $EFFECTS = [];
 
 // --- Load user functions from directory ---
 
-function functions_load(string $dir): void
+function _lf_functions_load(string $dir): void
 {
     if (!is_dir($dir)) return;
     foreach (glob($dir . '/*.php') as $file) {
@@ -27,7 +27,7 @@ function functions_load(string $dir): void
 
 // --- Apply derived fields to a loaded entity ---
 
-function apply_derived(string $type, object $entity): object
+function _lf_apply_derived(string $type, object $entity): object
 {
     global $DERIVED;
     if (!isset($DERIVED[$type])) return $entity;
@@ -43,7 +43,7 @@ function apply_derived(string $type, object $entity): object
 
 // --- Fire effects after save ---
 
-function fire_effects(string $type, object $entity, ?object $original = null): void
+function _lf_fire_effects(string $type, object $entity, ?object $original = null): void
 {
     global $EFFECTS;
     if (!isset($EFFECTS[$type])) return;

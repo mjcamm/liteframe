@@ -12,7 +12,7 @@
 
 // --- Identifier validation ---
 
-function validate_identifier(string $name): void
+function _lf_validate_identifier(string $name): void
 {
     if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $name)) {
         throw new \InvalidArgumentException("Invalid identifier: {$name}");
@@ -25,9 +25,9 @@ function validate_identifier(string $name): void
  * Convert entity type name to table name.
  * article → entities__article
  */
-function entity_table(string $type): string
+function _lf_entity_table(string $type): string
 {
-    validate_identifier($type);
+    _lf_validate_identifier($type);
     return 'entities__' . $type;
 }
 
@@ -35,7 +35,7 @@ function entity_table(string $type): string
  * Build explicit column list for a type from $TYPES config.
  * Returns '*' if type is unknown (graceful fallback for tests with empty $TYPES).
  */
-function entity_columns(string $type): string
+function _lf_entity_columns(string $type): string
 {
     global $TYPES;
     if (!isset($TYPES[$type])) return '*';
@@ -65,8 +65,8 @@ function entity_load(int $id, array $with = []): ?object
     if (!$registry) {
         return null;
     }
-    $table = entity_table($registry->type);
-    $cols = entity_columns($registry->type);
+    $table = _lf_entity_table($registry->type);
+    $cols = _lf_entity_columns($registry->type);
     $entity = $db->one("SELECT {$cols} FROM {$table} WHERE id = ?", [$id]);
     if ($entity) {
         $entity->_type = $registry->type;
@@ -75,8 +75,8 @@ function entity_load(int $id, array $with = []): ?object
         if (hook_exists($registry->type, 'on_load')) {
             $entity = hook_fire($registry->type, 'on_load', $entity);
         }
-        $entity = apply_derived($registry->type, $entity);
-        $entity = file_resolve_entity($registry->type, $entity);
+        $entity = _lf_apply_derived($registry->type, $entity);
+        $entity = _lf_file_resolve_entity($registry->type, $entity);
 
         // Resolve references
         if ($with) {
@@ -116,9 +116,9 @@ function entity_load(int $id, array $with = []): ?object
 function entity_load_by(string $type, string $field, mixed $value): ?object
 {
     global $db;
-    validate_identifier($field);
-    $table = entity_table($type);
-    $cols = entity_columns($type);
+    _lf_validate_identifier($field);
+    $table = _lf_entity_table($type);
+    $cols = _lf_entity_columns($type);
     $entity = $db->one("SELECT {$cols} FROM {$table} WHERE {$field} = ?", [$value]);
     if ($entity) {
         $entity->_type = $type;
@@ -126,8 +126,8 @@ function entity_load_by(string $type, string $field, mixed $value): ?object
         if (hook_exists($type, 'on_load')) {
             $entity = hook_fire($type, 'on_load', $entity);
         }
-        $entity = apply_derived($type, $entity);
-        $entity = file_resolve_entity($type, $entity);
+        $entity = _lf_apply_derived($type, $entity);
+        $entity = _lf_file_resolve_entity($type, $entity);
     }
     return $entity;
 }
@@ -139,17 +139,17 @@ function entity_load_by(string $type, string $field, mixed $value): ?object
 function entity_save(string $type, array $data): object|array
 {
     global $db, $TYPES;
-    $table = entity_table($type);
+    $table = _lf_entity_table($type);
 
     // Coerce and validate before anything else
     $is_update = isset($data['id']);
-    $data = entity_coerce($type, $data);
-    $validationResult = entity_validate($type, $data, $is_update);
+    $data = _lf_entity_coerce($type, $data);
+    $validationResult = _lf_entity_validate($type, $data, $is_update);
     if ($validationResult !== null) return $validationResult;
 
     // Auto-hash password for user type
     if ($type === 'user' && isset($data['password'])) {
-        $data['password'] = auth_hash_password($data['password']);
+        $data['password'] = _lf_auth_hash_password($data['password']);
     }
 
     // Separate many-to-many fields from regular fields
@@ -176,7 +176,7 @@ function entity_save(string $type, array $data): object|array
         }
 
         // Process file uploads
-        $data = file_process_uploads($type, $data, $id, $original);
+        $data = _lf_file_process_uploads($type, $data, $id, $original);
         if (is_array($data) && isset($data['error'])) return $data;
 
         $db->transaction(function($db) use ($table, $type, &$data, $id, $manyToMany, $typeFields, $TYPES) {
@@ -185,7 +185,7 @@ function entity_save(string $type, array $data): object|array
                 if (isset($TYPES[$type])) {
                     $data['updated_at'] = date('Y-m-d H:i:s');
                 }
-                array_map('validate_identifier', array_keys($data));
+                array_map('_lf_validate_identifier', array_keys($data));
                 $set = implode(', ', array_map(fn($k) => "{$k} = ?", array_keys($data)));
                 $db->exec(
                     "UPDATE {$table} SET {$set} WHERE id = ?",
@@ -210,7 +210,7 @@ function entity_save(string $type, array $data): object|array
         $entity = entity_load($id);
 
         // Fire effects for changed fields
-        fire_effects($type, $entity, $original);
+        _lf_fire_effects($type, $entity, $original);
 
         if (hook_exists($type, 'after_update')) {
             hook_fire($type, 'after_update', $entity, $original);
@@ -228,7 +228,7 @@ function entity_save(string $type, array $data): object|array
     }
 
     // Process file uploads (entityId=0 temporarily; corrected after insert)
-    $data = file_process_uploads($type, $data, 0);
+    $data = _lf_file_process_uploads($type, $data, 0);
     if (is_array($data) && isset($data['error'])) return $data;
 
     // Track file IDs that need entity_id correction after insert
@@ -244,7 +244,7 @@ function entity_save(string $type, array $data): object|array
         $id = $db->lastId();
 
         $data['id'] = $id;
-        array_map('validate_identifier', array_keys($data));
+        array_map('_lf_validate_identifier', array_keys($data));
         $columns = implode(', ', array_keys($data));
         $placeholders = implode(', ', array_fill(0, count($data), '?'));
         $db->exec(
@@ -275,7 +275,7 @@ function entity_save(string $type, array $data): object|array
     $entity = entity_load($id);
 
     // Fire effects (create — no original)
-    fire_effects($type, $entity);
+    _lf_fire_effects($type, $entity);
 
     if (hook_exists($type, 'after_create')) {
         hook_fire($type, 'after_create', $entity);
@@ -296,7 +296,7 @@ function entity_delete(int $id): bool|array
     }
 
     $type = $registry->type;
-    $table = entity_table($type);
+    $table = _lf_entity_table($type);
     $entity = entity_load($id);
 
     // before_delete hook — can block
@@ -330,7 +330,7 @@ function entity_delete(int $id): bool|array
     });
 
     // Clean up associated files (disk I/O — outside transaction)
-    file_cleanup_entity($type, $id);
+    _lf_file_cleanup_entity($type, $id);
 
     // after_delete hook
     if (hook_exists($type, 'after_delete')) {
@@ -346,7 +346,7 @@ function entity_delete(int $id): bool|array
 function entity_query(string $type): EntityQuery
 {
     global $db;
-    return new EntityQuery($db, entity_table($type), $type);
+    return new EntityQuery($db, _lf_entity_table($type), $type);
 }
 
 // --- Request helpers ---

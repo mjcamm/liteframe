@@ -8,34 +8,34 @@ require_once __DIR__ . '/../src/files.php';
 echo "=== Schema Tests ===\n\n";
 
 // Test 1: Parse field definitions
-$f = parse_field('string');
+$f = _lf_parse_field('string');
 assert($f['type'] === 'string' && !$f['required'] && $f['default'] === null && $f['public'] === false);
 echo "[PASS] Parse: string\n";
 
-$f = parse_field('string, required=true');
+$f = _lf_parse_field('string, required=true');
 assert($f['type'] === 'string' && $f['required'] === true);
 echo "[PASS] Parse: string, required=true\n";
 
-$f = parse_field('boolean, default=false');
+$f = _lf_parse_field('boolean, default=false');
 assert($f['type'] === 'boolean' && $f['default'] === 'false');
 echo "[PASS] Parse: boolean, default=false\n";
 
-$f = parse_field('enum(news, tutorial, review)');
+$f = _lf_parse_field('enum(news, tutorial, review)');
 assert($f['type'] === 'enum(news, tutorial, review)');
 echo "[PASS] Parse: enum(news, tutorial, review)\n";
 
-$f = parse_field('file, public=true');
+$f = _lf_parse_field('file, public=true');
 assert($f['type'] === 'file' && $f['public'] === true);
 echo "[PASS] Parse: file, public=true\n";
 
 // Test 2: Parse types.yml
-$types = parse_types(__DIR__ . '/../config/types.yml');
+$types = _lf_parse_types(__DIR__ . '/fixtures/types.yml');
 assert(isset($types['article']), 'article type should exist');
 assert(isset($types['page']), 'page type should exist');
 echo "[PASS] Parsed types.yml: " . count($types) . " types\n";
 
 // Test 3: Generate SQL — check table names have prefix
-$statements = generate_schema($types);
+$statements = _lf_generate_schema($types);
 $hasRegistry = false;
 $hasArticle = false;
 $hasPage = false;
@@ -51,7 +51,7 @@ echo "[PASS] Tables use entities__ prefix\n";
 
 // Test 4: Apply schema and test with entity functions
 $db = new Database(':memory:');
-schema_apply($db, $types);
+_lf_schema_apply($db, $types);
 
 require_once __DIR__ . '/../src/EntityQuery.php';
 require_once __DIR__ . '/../src/derived.php';

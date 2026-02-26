@@ -22,7 +22,7 @@ $_hooks = [];
 /**
  * Load all hook files from a directory.
  */
-function hooks_load(string $dir): void
+function _lf_hooks_load(string $dir): void
 {
     global $_hooks;
     if (!is_dir($dir)) return;

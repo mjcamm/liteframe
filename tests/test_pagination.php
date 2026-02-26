@@ -20,7 +20,7 @@ $TYPES = [
         'title' => ['type' => 'string', 'required' => true, 'default' => null, 'reference' => null, 'reference_many' => false, 'public' => false],
     ],
 ];
-schema_sync($db, $TYPES);
+_lf_schema_sync($db, $TYPES);
 
 // Seed 25 articles
 for ($i = 1; $i <= 25; $i++) {

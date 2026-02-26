@@ -9,7 +9,7 @@
 
 $_settings = [];
 
-function settings_load(string $file): void
+function _lf_settings_load(string $file): void
 {
     global $_settings;
     if (!file_exists($file)) return;
@@ -24,7 +24,7 @@ function settings_load(string $file): void
             $trimmed = trim($line);
             if (!str_contains($trimmed, ':')) continue;
             [$key, $value] = explode(':', $trimmed, 2);
-            $_settings[$currentSection][trim($key)] = cast_setting(trim($value));
+            $_settings[$currentSection][trim($key)] = _lf_cast_setting(trim($value));
             continue;
         }
 
@@ -45,11 +45,11 @@ function settings_load(string $file): void
         }
 
         $currentSection = null;
-        $_settings[$key] = cast_setting($value);
+        $_settings[$key] = _lf_cast_setting($value);
     }
 }
 
-function cast_setting(string $value): mixed
+function _lf_cast_setting(string $value): mixed
 {
     if ($value === 'true') return true;
     if ($value === 'false') return false;

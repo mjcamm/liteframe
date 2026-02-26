@@ -13,7 +13,7 @@ echo "=== Reference Tests ===\n\n";
 // Bootstrap with in-memory DB
 $db = new Database(':memory:');
 
-// Set up $TYPES — mimics what parse_types() produces from types.yml
+// Set up $TYPES — mimics what _lf_parse_types() produces from types.yml
 $TYPES = [
     'user' => [
         'name' => ['type' => 'string', 'required' => true, 'default' => null, 'reference' => null, 'reference_many' => false, 'public' => false],

@@ -10,7 +10,7 @@
 /**
  * Send CORS headers. Returns true if this is a preflight request (caller should exit).
  */
-function cors_headers(): bool
+function _lf_cors_headers(): bool
 {
     header('Access-Control-Allow-Origin: ' . setting('cors.origin', '*'));
     header('Access-Control-Allow-Methods: ' . setting('cors.methods', 'GET, POST, PUT, DELETE, OPTIONS'));
