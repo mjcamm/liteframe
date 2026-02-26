@@ -181,7 +181,9 @@ function _lf_auth_authenticate_request(): void
 {
     global $_current_user;
 
-    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    $header = $_SERVER['HTTP_AUTHORIZATION']
+        ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+        ?? '';
     if (!str_starts_with($header, 'Bearer ')) return;
 
     $token = substr($header, 7);
