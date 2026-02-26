@@ -136,6 +136,35 @@ function lightframe_build(string $projectDir, string $distDir): string
     }
     $output[] = '';
 
+    // --- Static file serving (Nginx/Herd compatibility) ---
+    $output[] = '// Serve static files (Nginx/Herd compatibility — Apache handles this via .htaccess)';
+    $output[] = '$_staticUri = parse_url($_SERVER["REQUEST_URI"], PHP_URL_PATH);';
+    $output[] = '$_scriptDir = dirname($_SERVER["SCRIPT_NAME"]);';
+    $output[] = 'if ($_scriptDir !== "/" && $_scriptDir !== "\\\\") {';
+    $output[] = '    $_staticUri = substr($_staticUri, strlen($_scriptDir)) ?: "/";';
+    $output[] = '}';
+    $output[] = 'if ($_staticUri !== "/" && pathinfo($_staticUri, PATHINFO_EXTENSION)) {';
+    $output[] = '    $_ext = strtolower(pathinfo($_staticUri, PATHINFO_EXTENSION));';
+    $output[] = '    if (in_array($_ext, ["php", "db", "yml", "env", "htaccess"])) {';
+    $output[] = '        http_response_code(403);';
+    $output[] = '        return;';
+    $output[] = '    }';
+    $output[] = '    $_staticFile = __DIR__ . $_staticUri;';
+    $output[] = '    if (file_exists($_staticFile) && !is_dir($_staticFile)) {';
+    $output[] = '        $_mimeTypes = [';
+    $output[] = '            "js" => "application/javascript", "css" => "text/css", "html" => "text/html",';
+    $output[] = '            "json" => "application/json", "svg" => "image/svg+xml", "png" => "image/png",';
+    $output[] = '            "jpg" => "image/jpeg", "jpeg" => "image/jpeg", "gif" => "image/gif",';
+    $output[] = '            "webp" => "image/webp", "ico" => "image/x-icon", "woff" => "font/woff",';
+    $output[] = '            "woff2" => "font/woff2", "ttf" => "font/ttf", "pdf" => "application/pdf",';
+    $output[] = '        ];';
+    $output[] = '        header("Content-Type: " . ($_mimeTypes[$_ext] ?? "application/octet-stream"));';
+    $output[] = '        readfile($_staticFile);';
+    $output[] = '        return;';
+    $output[] = '    }';
+    $output[] = '}';
+    $output[] = '';
+
     // --- Bootstrap ---
     $output[] = '// === BOOTSTRAP ===';
     $output[] = "error_reporting(E_ALL);";
