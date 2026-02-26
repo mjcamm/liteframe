@@ -209,7 +209,8 @@ function lightframe_build(string $projectDir, string $distDir): string
     $output[] = '    }';
     $output[] = '    if (!is_dir(__DIR__ . "/files/public")) mkdir(__DIR__ . "/files/public", 0755, true);';
     $output[] = '    if (!is_dir(__DIR__ . "/files/protected")) mkdir(__DIR__ . "/files/protected", 0755, true);';
-    $output[] = '    header("Location: /");';
+    $output[] = '    $setupBase = rtrim(dirname($_SERVER["SCRIPT_NAME"]), "/\\\\") ?: "/";';
+    $output[] = '    header("Location: " . $setupBase);';
     $output[] = '    exit;';
     $output[] = '}';
     $output[] = '';
@@ -266,7 +267,13 @@ function lightframe_build(string $projectDir, string $distDir): string
     $output[] = '    $spaFile = __DIR__ . "/index.html";';
     $output[] = '    if (file_exists($spaFile)) {';
     $output[] = '        header("Content-Type: text/html");';
-    $output[] = '        readfile($spaFile);';
+    $output[] = '        $html = file_get_contents($spaFile);';
+    $output[] = '        $base = rtrim(dirname($_SERVER["SCRIPT_NAME"]), "/\\\\");';
+    $output[] = '        if ($base !== "") {';
+    $output[] = '            $html = str_replace("/_app/", $base . "/_app/", $html);';
+    $output[] = '            $html = str_replace("base: \"\"", "base: \"" . $base . "\"", $html);';
+    $output[] = '        }';
+    $output[] = '        echo $html;';
     $output[] = '        return;';
     $output[] = '    }';
     $output[] = '    http_response_code(404);';

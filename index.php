@@ -29,7 +29,7 @@ if ($_scriptDir !== '/' && $_scriptDir !== '\\') {
 }
 if ($_staticUri !== '/' && pathinfo($_staticUri, PATHINFO_EXTENSION)) {
     $_ext = strtolower(pathinfo($_staticUri, PATHINFO_EXTENSION));
-    if (in_array($_ext, ['php', 'db', 'yml', 'env', 'htaccess'])) {
+    if (in_array($_ext, ['php', 'db', 'yml', 'env', 'htaccess']) && basename($_staticUri) !== 'build.php') {
         http_response_code(403);
         return;
     }
@@ -57,6 +57,7 @@ spl_autoload_register(function ($class) {
 });
 
 // Load non-class source files
+require_once __DIR__ . '/src/settings.php';
 require_once __DIR__ . '/src/hooks.php';
 require_once __DIR__ . '/src/derived.php';
 require_once __DIR__ . '/src/auth.php';
@@ -71,6 +72,7 @@ require_once __DIR__ . '/src/cors.php';
 // Bootstrap
 $db = new Database(__DIR__ . '/data.db');
 $request = new Request();
+_lf_settings_load(__DIR__ . '/settings.yml');
 
 // Schema from types.yml
 $TYPES = _lf_parse_types(__DIR__ . '/config/types.yml');

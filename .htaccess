@@ -9,7 +9,7 @@ RewriteRule \.db$ - [F,L]
 RewriteRule \.yml$ - [F,L]
 RewriteRule ^files/protected/ - [F,L]
 RewriteRule ^files/.*\.ph(p[345s]?|ar|t|tml)$ - [F,L]
-RewriteRule ^(src|config|handlers|hooks|functions|tests|dist|build\.php|info\.php) - [F,L]
+RewriteRule ^(src|config|handlers|hooks|functions|tests|dist|info\.php) - [F,L]
 
 # Serve real files directly (static assets, uploads, etc)
 RewriteCond %{REQUEST_FILENAME} -f
