@@ -181,9 +181,16 @@ function _lf_auth_authenticate_request(): void
 {
     global $_current_user;
 
+    // Check standard header, then Apache CGI/FastCGI rewrite fallback,
+    // then getallheaders() as a universal last resort.
     $header = $_SERVER['HTTP_AUTHORIZATION']
         ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
         ?? '';
+    if (!$header && function_exists('getallheaders')) {
+        foreach (getallheaders() as $key => $value) {
+            if (strtolower($key) === 'authorization') { $header = $value; break; }
+        }
+    }
     if (!str_starts_with($header, 'Bearer ')) return;
 
     $token = substr($header, 7);
