@@ -3,7 +3,8 @@ data.db
 data.db.*
 
 # Build output
-dist/
+dist/*
+!dist/.gitkeep
 
 # Uploaded files
 files/public/*
@@ -12,7 +13,12 @@ files/protected/*
 !files/protected/.gitkeep
 
 # Frontend (user creates their own)
-frontend/
+frontend/*
+!frontend/.gitkeep
+
+# User-defined functions
+functions/*
+!functions/.gitkeep
 
 # IDE
 .idea/

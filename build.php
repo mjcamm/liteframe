@@ -145,7 +145,7 @@ function lightframe_build(string $projectDir, string $distDir): string
     $output[] = '}';
     $output[] = 'if ($_staticUri !== "/" && pathinfo($_staticUri, PATHINFO_EXTENSION)) {';
     $output[] = '    $_ext = strtolower(pathinfo($_staticUri, PATHINFO_EXTENSION));';
-    $output[] = '    if (in_array($_ext, ["php", "db", "yml", "env", "htaccess"])) {';
+    $output[] = '    if (in_array($_ext, ["php", "db", "yml", "env", "htaccess"]) && basename($_staticUri) !== "index.php") {';
     $output[] = '        http_response_code(403);';
     $output[] = '        return;';
     $output[] = '    }';
