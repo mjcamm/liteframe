@@ -2,14 +2,14 @@
 <?php
 
 /**
- * LightFrame CLI
+ * LiteFrame CLI
  *
  * Usage:
- *   php lightframe build       — compile PHP backend + build frontend
- *   php lightframe build:back  — compile PHP backend only
- *   php lightframe build:front — build frontend only
- *   php lightframe dev         — start frontend dev server with API proxy
- *   php lightframe cron        — run all cron tasks (ignores timing)
+ *   php liteframe build       — compile PHP backend + build frontend
+ *   php liteframe build:back  — compile PHP backend only
+ *   php liteframe build:front — build frontend only
+ *   php liteframe dev         — start frontend dev server with API proxy
+ *   php liteframe cron        — run all cron tasks (ignores timing)
  */
 
 require_once __DIR__ . '/src/settings.php';
@@ -39,7 +39,7 @@ function cmd_build_backend(): void
 {
     echo "Building backend...\n";
     require_once __DIR__ . '/build.php';
-    $distFile = lightframe_build(__DIR__, __DIR__ . '/dist');
+    $distFile = liteframe_build(__DIR__, __DIR__ . '/dist');
     echo "  Built {$distFile} (" . filesize($distFile) . " bytes)\n";
     echo "  Auto-setup: .htaccess and robots.txt will be created on first request\n";
     $cronKey = setting('cron_key', '');
@@ -202,9 +202,9 @@ function cmd_cron(): void
 function cmd_help(): void
 {
     echo <<<HELP
-    LightFrame CLI
+    LiteFrame CLI
 
-    Usage: php lightframe <command>
+    Usage: php liteframe <command>
 
     Commands:
       build        Build backend + frontend for production

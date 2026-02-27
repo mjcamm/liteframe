@@ -6,19 +6,19 @@
  * Can be called standalone (php build.php) or included by index.php on every request.
  */
 
-function lightframe_build(string $projectDir, string $distDir): string
+function liteframe_build(string $projectDir, string $distDir): string
 {
     $output = [];
 
     $output[] = '<?php';
-    $output[] = '// === COMPILED BY LIGHTFRAME ===';
+    $output[] = '// === COMPILED BY LITEFRAME ===';
     $output[] = '// Generated: ' . date('Y-m-d H:i:s');
     $output[] = '';
 
     // --- Inline all src/ files ---
     // Order matters: Database first, then EntityQuery, then functions, then Router/Request
     // schema.php included for runtime _lf_schema_sync()
-    $srcOrder = ['Database.php', 'EntityQuery.php', 'Request.php', 'Router.php', 'hooks.php', 'derived.php', 'settings.php', 'auth.php', 'validation.php', 'variables.php', 'cron.php', 'functions.php', 'schema.php', 'files.php', 'cors.php'];
+    $srcOrder = ['Database.php', 'EntityQuery.php', 'Request.php', 'Router.php', 'hooks.php', 'derived.php', 'settings.php', 'auth.php', 'validation.php', 'variables.php', 'cron.php', 'functions.php', 'schema.php', 'files.php', 'cors.php', 'rate_limit.php'];
     $output[] = '// === FRAMEWORK ===';
     foreach ($srcOrder as $filename) {
         $file = $projectDir . '/src/' . $filename;
@@ -170,12 +170,13 @@ function lightframe_build(string $projectDir, string $distDir): string
     $output[] = "error_reporting(E_ALL);";
     $output[] = "ini_set('display_errors', '0');";
     $output[] = "ini_set('log_errors', '1');";
-    $output[] = "define('LIGHTFRAME_PROJECT_DIR', __DIR__);";
+    $output[] = "define('LITEFRAME_PROJECT_DIR', __DIR__);";
     $output[] = '// Database — find existing DB or choose a secure writable location';
     $output[] = '$_dbDir = null;';
+    $output[] = '$_docRoot = $_SERVER["DOCUMENT_ROOT"] ?? __DIR__;';
     $output[] = '$_dbLocations = [';
-    $output[] = '    dirname(__DIR__),';
-    $output[] = '    dirname(__DIR__) . "/private_html",';
+    $output[] = '    dirname($_docRoot),';
+    $output[] = '    dirname($_docRoot) . "/private_html",';
     $output[] = '    __DIR__ . "/.data",';
     $output[] = '];';
     $output[] = '// First pass: find an existing database';
@@ -203,7 +204,7 @@ function lightframe_build(string $projectDir, string $distDir): string
     $output[] = '    $_dbDir = $_dataDir;';
     $output[] = '}';
     $output[] = '$db = new Database($_dbDir . "/data.db");';
-    $output[] = 'define("LIGHTFRAME_DB_DIR", $_dbDir);';
+    $output[] = 'define("LITEFRAME_DB_DIR", $_dbDir);';
     $output[] = '$request = new Request();';
     $output[] = '';
     $output[] = '// Schema — sync from types config';
@@ -250,7 +251,7 @@ function lightframe_build(string $projectDir, string $distDir): string
 
     // --- Database security self-check (runs once) ---
     $output[] = '// === DB SECURITY CHECK ===';
-    $output[] = 'if (!variable_get("_db_security_checked", false) && LIGHTFRAME_DB_DIR === __DIR__ . "/.data") {';
+    $output[] = 'if (!variable_get("_db_security_checked", false) && LITEFRAME_DB_DIR === __DIR__ . "/.data") {';
     $output[] = '    $_scheme = (!empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off") ? "https" : "http";';
     $output[] = '    $_base = rtrim(dirname($_SERVER["SCRIPT_NAME"]), "/\\\\");';
     $output[] = '    $_checkUrl = $_scheme . "://" . $_SERVER["HTTP_HOST"] . $_base . "/.data/data.db";';
@@ -259,11 +260,11 @@ function lightframe_build(string $projectDir, string $distDir): string
     $output[] = '    if ($_headers && strpos($_headers[0], "200") !== false) {';
     $output[] = '        http_response_code(500);';
     $output[] = '        header("Content-Type: text/html");';
-    $output[] = '        echo "<!DOCTYPE html><html><head><title>LightFrame Security Error</title><style>body{font-family:sans-serif;max-width:600px;margin:80px auto;padding:0 20px;color:#333}h1{color:#c00}code{background:#f4f4f4;padding:2px 6px;border-radius:3px}pre{background:#f4f4f4;padding:12px;border-radius:6px;overflow-x:auto}</style></head><body>";';
+    $output[] = '        echo "<!DOCTYPE html><html><head><title>LiteFrame Security Error</title><style>body{font-family:sans-serif;max-width:600px;margin:80px auto;padding:0 20px;color:#333}h1{color:#c00}code{background:#f4f4f4;padding:2px 6px;border-radius:3px}pre{background:#f4f4f4;padding:12px;border-radius:6px;overflow-x:auto}</style></head><body>";';
     $output[] = '        echo "<h1>Security Error</h1>";';
     $output[] = '        echo "<p>Your database file is publicly accessible at:</p>";';
     $output[] = '        echo "<pre>" . htmlspecialchars($_checkUrl) . "</pre>";';
-    $output[] = '        echo "<p>LightFrame tried to store the database outside the web root but could not find a writable directory. It fell back to <code>.data/</code> inside the web root, but your server is not blocking access to it.</p>";';
+    $output[] = '        echo "<p>LiteFrame tried to store the database outside the web root but could not find a writable directory. It fell back to <code>.data/</code> inside the web root, but your server is not blocking access to it.</p>";';
     $output[] = '        echo "<h2>How to fix (choose one)</h2>";';
     $output[] = '        echo "<ol>";';
     $output[] = '        echo "<li><strong>Best option:</strong> Make the parent directory writable:<br><pre>chmod 755 " . htmlspecialchars(dirname(__DIR__)) . "</pre></li>";';
@@ -340,6 +341,14 @@ function lightframe_build(string $projectDir, string $distDir): string
     $output[] = '    }';
     $output[] = '    http_response_code(404);';
     $output[] = '    echo json_encode(["error" => "Not found"]);';
+    $output[] = '    return;';
+    $output[] = '}';
+    $output[] = '';
+
+    // Rate limiting
+    $output[] = '// Rate limiting';
+    $output[] = 'if (!_lf_rate_limit_check($matched_route["handler"])) {';
+    $output[] = '    echo json_encode(error(429, "Too many requests"));';
     $output[] = '    return;';
     $output[] = '}';
     $output[] = '';
@@ -444,7 +453,7 @@ function copy_dir(string $src, string $dst, array $exclude = []): void
 
 // Run build when accessed directly (CLI or browser)
 if (php_sapi_name() === 'cli' || !isset($_SERVER['REQUEST_URI']) || basename($_SERVER['SCRIPT_FILENAME']) === 'build.php') {
-    $distFile = lightframe_build(__DIR__, __DIR__ . '/dist');
+    $distFile = liteframe_build(__DIR__, __DIR__ . '/dist');
     $size = number_format(filesize($distFile));
     $frontend = is_dir(__DIR__ . '/frontend/build') ? ' + frontend' : '';
     echo "Build complete — dist/index.php ({$size} bytes){$frontend}";

@@ -1,4 +1,4 @@
-# LightFrame Settings
+# LiteFrame Settings
 
 dev_mode: true
 
@@ -19,3 +19,10 @@ cors:
   methods: GET, POST, PUT, DELETE, OPTIONS
   headers: Content-Type, Authorization
   max_age: 86400
+
+rate_limit:
+  enabled: true
+  window: 60
+  max_requests: 100
+  login_window: 900
+  login_max: 5

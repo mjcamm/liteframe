@@ -1,8 +1,8 @@
-# LightFrame — Setup Guide
+# LiteFrame — Setup Guide
 
 ## Quick Start
 
-LightFrame is designed to be drop-and-go. Upload the contents of `dist/` to your web root and visit the URL. On first load, it automatically:
+LiteFrame is designed to be drop-and-go. Upload the contents of `dist/` to your web root and visit the URL. On first load, it automatically:
 
 1. Finds a secure location and creates the SQLite database (`data.db`)
 2. Runs schema sync (creates all tables)
@@ -19,13 +19,13 @@ No Composer. No command line. No database setup.
 
 ### Apache (Shared Hosting, cPanel, MAMP, XAMPP, WAMP)
 
-**No extra configuration needed.** LightFrame auto-generates an `.htaccess` file on first run that handles URL rewriting, auth headers, and security rules.
+**No extra configuration needed.** LiteFrame auto-generates an `.htaccess` file on first run that handles URL rewriting, auth headers, and security rules.
 
 Just upload the `dist/` contents to your `public_html/` directory (or a subdirectory) and hit the URL.
 
 ### Nginx (Cloudways, VPS, Docker)
 
-LightFrame works on Nginx but may need a small config addition depending on your setup.
+LiteFrame works on Nginx but may need a small config addition depending on your setup.
 
 #### Deployed at domain root (e.g., `yourdomain.com/`)
 
@@ -77,7 +77,7 @@ Link or park the project directory as usual. No extra setup needed — Herd/Vale
 
 ## Subdirectory Deployment
 
-LightFrame fully supports running in a subdirectory (e.g., `yourdomain.com/myapp/`). The compiled `dist/index.php` automatically detects the subdirectory and adjusts:
+LiteFrame fully supports running in a subdirectory (e.g., `yourdomain.com/myapp/`). The compiled `dist/index.php` automatically detects the subdirectory and adjusts:
 
 - API route matching (strips the subdirectory prefix)
 - SPA asset paths (rewrites `/_app/` URLs to include the subdirectory)
@@ -116,7 +116,7 @@ Upload the contents of `dist/` — not the `dist/` folder itself — to your dep
 
 ## Database Security
 
-LightFrame automatically finds a secure location for `data.db` outside the web root. It tries the following locations in order:
+LiteFrame automatically finds a secure location for `data.db` outside the web root. It tries the following locations in order:
 
 ### Location priority chain
 
@@ -139,7 +139,7 @@ The framework tries each in order and uses the first writable location it finds.
 
 ### Self-verification check
 
-When the `.data/` fallback is used, LightFrame makes a one-time HTTP request to its own database URL. If it gets a 200 response (meaning the file is publicly accessible), it shows an error page with specific fix instructions for your server. Once verified as secure, it stores a flag and never checks again.
+When the `.data/` fallback is used, LiteFrame makes a one-time HTTP request to its own database URL. If it gets a 200 response (meaning the file is publicly accessible), it shows an error page with specific fix instructions for your server. Once verified as secure, it stores a flag and never checks again.
 
 ### If you see the "Security Error" page
 
@@ -165,7 +165,7 @@ This means the `.data/` fallback is in use AND your server isn't blocking access
 The database is publicly accessible. See [Database Security](#database-security) above for fix options.
 
 ### 403 Forbidden on first visit
-The web server user needs write permission to the deployment directory. LightFrame creates `.htaccess`, `robots.txt`, and the `files/` directories on first run. Ensure the directory is writable.
+The web server user needs write permission to the deployment directory. LiteFrame creates `.htaccess`, `robots.txt`, and the `files/` directories on first run. Ensure the directory is writable.
 
 ### "MIME type not allowed" errors for JS files
 The SPA asset paths aren't resolving correctly. This usually means a subdirectory path issue. Check that:

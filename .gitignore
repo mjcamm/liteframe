@@ -20,8 +20,9 @@ frontend/*
 functions/*
 !functions/.gitkeep
 
-# IDE
+# IDE / AI
 .idea/
+.claude/
 .vscode/
 *.swp
 *.swo

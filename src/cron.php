@@ -9,7 +9,7 @@
  *     every: 60
  *
  * Checked on every web request (near-zero overhead when nothing is due).
- * Also runnable via `php lightframe cron` for manual/crontab use.
+ * Also runnable via `php liteframe cron` for manual/crontab use.
  */
 
 $CRONS = [];

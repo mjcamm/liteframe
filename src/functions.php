@@ -1,7 +1,7 @@
 <?php
 
 /**
- * LightFrame core functions.
+ * LiteFrame core functions.
  *
  * Plain functions — no classes, no $app object.
  * The $db variable exists in the global scope from bootstrap.

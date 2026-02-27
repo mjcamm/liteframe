@@ -34,7 +34,7 @@ if (!file_exists($dbPath)) {
 }
 $db = new Database($dbPath);
 
-echo "=== LightFrame Database Cleanup ===\n\n";
+echo "=== LiteFrame Database Cleanup ===\n\n";
 
 // --- Find orphaned entity tables ---
 

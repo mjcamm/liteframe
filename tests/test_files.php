@@ -21,10 +21,10 @@ $TYPES = _lf_parse_types(__DIR__ . '/fixtures/types.yml');
 _lf_schema_sync($db, $TYPES);
 
 // Use a temp directory for file storage during tests
-$testDir = sys_get_temp_dir() . '/lightframe_test_' . uniqid();
+$testDir = sys_get_temp_dir() . '/liteframe_test_' . uniqid();
 mkdir($testDir . '/files/public', 0755, true);
 mkdir($testDir . '/files/protected', 0755, true);
-define('LIGHTFRAME_PROJECT_DIR', $testDir);
+define('LITEFRAME_PROJECT_DIR', $testDir);
 
 // --- Test 1: _lf_parse_field recognizes file type ---
 $f = _lf_parse_field('file');

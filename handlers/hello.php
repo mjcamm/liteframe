@@ -1,5 +1,5 @@
 <?php
 
 return function () {
-    return ['message' => 'Hello from LightFrame!', 'time' => date('c')];
+    return ['message' => 'Hello from LiteFrame!', 'time' => date('c')];
 };

@@ -317,6 +317,7 @@ function _lf_schema_sync(Database $db, array $types): void
     $db->exec('CREATE TABLE IF NOT EXISTS _config (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
     $db->exec('CREATE TABLE IF NOT EXISTS _variables (name TEXT PRIMARY KEY, value TEXT NOT NULL)');
     $db->exec('CREATE TABLE IF NOT EXISTS _files (id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT NOT NULL, stored_name TEXT NOT NULL, mime_type TEXT NOT NULL, size INTEGER NOT NULL, storage TEXT NOT NULL, entity_type TEXT, entity_id INTEGER, field TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)');
+    $db->exec('CREATE TABLE IF NOT EXISTS _rate_limits (key TEXT PRIMARY KEY, hits INTEGER NOT NULL DEFAULT 0, window_start INTEGER NOT NULL)');
 
     // 2. Fingerprint check — skip if unchanged (fast path)
     $fingerprint = _lf_schema_fingerprint($types);

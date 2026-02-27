@@ -248,8 +248,8 @@ function _lf_file_process_uploads(string $type, array $data, int $entityId, ?obj
 
 function _lf_file_project_dir(): string
 {
-    // In compiled mode, LIGHTFRAME_PROJECT_DIR = __DIR__ (dist/ is the web root)
+    // In compiled mode, LITEFRAME_PROJECT_DIR = __DIR__ (dist/ is the web root)
     // In dev mode, falls back to dirname(__DIR__) (project root from src/)
-    $dir = defined('LIGHTFRAME_PROJECT_DIR') ? LIGHTFRAME_PROJECT_DIR : dirname(__DIR__);
+    $dir = defined('LITEFRAME_PROJECT_DIR') ? LITEFRAME_PROJECT_DIR : dirname(__DIR__);
     return $dir;
 }

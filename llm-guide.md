@@ -1,8 +1,8 @@
-# LightFrame CMS — LLM Developer Guide
+# LiteFrame CMS — LLM Developer Guide
 
-> This document is designed for LLMs building applications with LightFrame. It covers every feature, function, config option, and pattern you need to know.
+> This document is designed for LLMs building applications with LiteFrame. It covers every feature, function, config option, and pattern you need to know.
 
-## What Is LightFrame?
+## What Is LiteFrame?
 
 A PHP micro-framework with zero external dependencies. SQLite database, procedural functions, YAML config, JWT auth, file uploads, and single-file compilation for production. Pair it with any frontend SPA (SvelteKit, React, Vue, etc).
 
@@ -672,6 +672,43 @@ Priority order:
 
 ---
 
+## Rate Limiting
+
+### Configuration
+
+In `settings.yml`:
+```yaml
+rate_limit:
+  enabled: true          # Set to false to disable rate limiting entirely
+  window: 60             # General API window in seconds
+  max_requests: 100      # Max requests per IP per window
+  login_window: 900      # Auth endpoint window in seconds (15 minutes)
+  login_max: 5           # Max login attempts per IP per window
+```
+
+### How It Works
+
+- **General API limit:** All matched API routes are rate limited per IP address. Default: 100 requests per 60 seconds.
+- **Auth endpoint limit:** Login, refresh, and logout routes get a stricter limit. Default: 5 requests per 15 minutes. Protects against brute-force login attacks.
+- **SPA requests are not rate limited.** Only routes that match an API endpoint are checked.
+- **IP detection:** Uses `$_SERVER['REMOTE_ADDR']` directly. No header-based detection (X-Forwarded-For) to prevent spoofing.
+
+### Response Headers
+
+All API responses include:
+- `X-RateLimit-Limit` — maximum requests allowed in the window
+- `X-RateLimit-Remaining` — requests remaining in the current window
+- `X-RateLimit-Reset` — Unix timestamp when the window resets
+
+When rate limited (HTTP 429):
+- `Retry-After` — seconds until the client can retry
+
+### System Table
+
+`_rate_limits` — stores per-IP hit counters with sliding windows. Expired entries are cleaned up automatically (~1% of requests trigger cleanup). Schema: `key TEXT PRIMARY KEY, hits INTEGER, window_start INTEGER`.
+
+---
+
 ## Cron Tasks
 
 ### Defining Tasks
@@ -785,7 +822,7 @@ When `dev_mode: false`, `index.php` checks if source files have changed (via mti
 
 ## SPA Fallback
 
-LightFrame handles SPA routing server-side. When a request doesn't match any API route:
+LiteFrame handles SPA routing server-side. When a request doesn't match any API route:
 
 1. If `index.html` exists (frontend SPA), it's served with `Content-Type: text/html`
 2. If no `index.html` exists, returns JSON `{"error": "Not found"}` with 404 status
@@ -827,6 +864,7 @@ These are created automatically:
 | `_config` | Internal config (JWT secret, schema fingerprint) |
 | `_variables` | Key-value persistent storage |
 | `_files` | File upload metadata |
+| `_rate_limits` | IP-based rate limiting counters |
 | `entities__<type>` | One per entity type |
 | `entities__<type>__<field>` | Junction tables for many-to-many references |
 

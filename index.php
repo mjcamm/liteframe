@@ -68,6 +68,7 @@ require_once __DIR__ . '/src/variables.php';
 require_once __DIR__ . '/src/cron.php';
 require_once __DIR__ . '/src/files.php';
 require_once __DIR__ . '/src/cors.php';
+require_once __DIR__ . '/src/rate_limit.php';
 
 // Bootstrap
 $db = new Database(__DIR__ . '/data.db');
@@ -158,6 +159,12 @@ if (!$matched_route) {
     }
     http_response_code(404);
     echo json_encode(['error' => 'Not found']);
+    return;
+}
+
+// Rate limiting
+if (!_lf_rate_limit_check($matched_route['handler'])) {
+    echo json_encode(error(429, 'Too many requests'));
     return;
 }
 
