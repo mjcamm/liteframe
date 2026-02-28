@@ -35,6 +35,7 @@ function _lf_entity_coerce(string $type, array $data): array
             'integer', 'file' => is_numeric($value) ? (int) $value : $value,
             'number' => is_numeric($value) ? (float) $value : $value,
             'boolean' => _lf_coerce_boolean($value),
+            'json' => is_array($value) || is_object($value) ? json_encode($value) : $value,
             default => $value,
         };
     }

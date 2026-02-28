@@ -366,7 +366,9 @@ function input_exists(string $key): bool
 function input_all(): array
 {
     global $request;
-    return $request->all();
+    $data = $request->all();
+    unset($data['facade']);
+    return $data;
 }
 
 function input_file(string $key): ?array
