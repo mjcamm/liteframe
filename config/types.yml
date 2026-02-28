@@ -2,10 +2,10 @@
 #
 # Example:
 #   post:
-#     title: string, required=true
+#     title*: string
 #     body: richtext
 #     published: boolean, default=false
 
 user:
-  email: email, required=true
+  email*: email
   role: string, default=admin

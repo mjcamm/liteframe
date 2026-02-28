@@ -3,9 +3,15 @@
 class Router
 {
     private array $routes = [];
+    private array $registeredPaths = [];
 
     public function addRoute(string $name, array $route): void
     {
+        $key = $route['path'] . '|' . $route['method'];
+        if (isset($this->registeredPaths[$key])) {
+            return;
+        }
+        $this->registeredPaths[$key] = true;
         $this->routes[$name] = $route;
     }
 

@@ -43,6 +43,7 @@ project/
     settings.php         # Settings parser
     variables.php        # Key-value store
     functions.php        # Core entity CRUD + helpers
+    api.php              # $api() route generation + CRUD handlers
   handlers/              # Route handler files (one per route)
   hooks/                 # Entity lifecycle hooks (one per type)
   functions/             # User-defined functions (derived, effects, cron)
@@ -96,13 +97,13 @@ This is your schema. Each type becomes a database table (`entities__typename`).
 ```yaml
 # Type name (becomes table entities__user)
 user:
-  name: string, required=true
-  email: email, required=true
+  name*: string
+  email*: email
   role: string, default=user
   avatar: file, public=true
 
 article:
-  title: string, required=true
+  title*: string
   body: richtext
   published: boolean, default=false
   publish_date: date
@@ -116,12 +117,12 @@ article:
   $effect(published): on_publish          # fires on_publish() when 'published' changes
 
 tag:
-  name: string, required=true
+  name*: string
 
 page:
-  title: string, required=true
+  title*: string
   body: richtext
-  slug: string, required=true
+  slug*: string
   sort_order: integer, default=0
 ```
 
@@ -145,15 +146,78 @@ page:
 | `-> type[]` | (junction) | Array of numeric IDs | Many-to-many (junction table) |
 
 **Field modifiers:**
-- `required=true` — validated on create (not on partial update)
+- `field_name*` — append `*` to the field name to mark it as required (validated on create, not on partial update)
 - `default=value` — SQLite DEFAULT clause; required fields with defaults don't fail validation
 - `public=true` — for file fields: stored in `files/public/` for direct web access
 
 **Special features:**
 - `$derived(field_name): function_name` — computed field, calculated on every load by calling the named function. Never stored in the database.
 - `$effect(field_name): function_name` — side-effect function, called after save when the watched field changes value.
+- `$api(action): permission` — auto-generates a CRUD API route for this type. See **$api() Directives** below.
 
 **Schema auto-migration:** When you add a new field to types.yml, it's automatically added to the database via `ALTER TABLE ADD COLUMN` on the next request. Existing rows get a safe default (0 for integers, empty string for text). Removing a field from types.yml hides it from queries but does NOT drop the column (SQLite limitation).
+
+---
+
+### $api() Directives — Auto-Generated CRUD Routes
+
+Instead of manually defining routes in `routes.yml` and writing handler files, you can declare API routes directly on a type using `$api()` directives. Only declared actions get routes — a type with no `$api()` lines has no routes.
+
+```yaml
+article:
+  title*: string
+  body: richtext
+  author: -> user
+  published: boolean, default=false
+  $api(list): public
+  $api(view): public
+  $api(create): auth
+  $api(update): auth
+  $api(delete): admin
+
+page:
+  title*: string
+  body: richtext
+  $api(list): public
+  $api(view): public
+
+audit_log:
+  action: string
+  user: -> user
+  # no $api() — internal only, no routes generated
+```
+
+**Actions and generated routes:**
+
+| Directive | Method | Path | Needs :id |
+|-----------|--------|------|-----------|
+| `$api(list)` | GET | `/api/{type}` | No |
+| `$api(view)` | GET | `/api/{type}/:id` | Yes |
+| `$api(create)` | POST | `/api/{type}` | No |
+| `$api(update)` | PUT | `/api/{type}/:id` | Yes |
+| `$api(delete)` | DELETE | `/api/{type}/:id` | Yes |
+
+**Permission values:**
+
+| Value | Meaning |
+|-------|---------|
+| `public` | No auth required (`auth: false`) |
+| `auth` | Requires valid JWT (`auth: true`) |
+| Any role name (e.g. `admin`) | Requires JWT + that role (`auth: true, roles: admin`) |
+
+**Built-in handler behavior:**
+- **list** — returns paginated results (uses `paginate_request()`, supports `?page=` and `?per_page=`). Supports sorting via `?sort=field&order=asc|desc` (defaults to `id` desc). Supports filtering via `?filter[field]=value` for any field defined in the type schema (unknown fields are ignored)
+- **view** — returns the entity with all references eager-loaded (`['*']`), or 404
+- **create** — passes all input to `entity_save()` (validation, hooks, file uploads all apply)
+- **update** — passes input + route `:id` to `entity_save()` as an update
+- **delete** — calls `entity_delete()`, respects `before_delete` hooks that can block
+
+**Override with routes.yml:** If you define a route in `routes.yml` that matches the same path and method as an auto-generated `$api()` route, the `routes.yml` route takes precedence. This lets you start with `$api()` and customize individual endpoints when needed.
+
+**Edge cases:**
+- Invalid action names (e.g. `$api(patch)`) are silently skipped
+- Duplicate actions on the same type — last one wins
+- Types without any `$api()` lines generate zero routes
 
 ---
 
@@ -234,9 +298,9 @@ return function () {
 <?php
 return function () {
     return entity_save('article', [
-        'title' => input('title'),
-        'body' => input('body', ''),
-        'published' => input('published', false),
+        'title' => query_param('title'),
+        'body' => query_param('body', ''),
+        'published' => query_param('published', false),
         'author' => current_user()->id,
     ]);
 };
@@ -281,8 +345,8 @@ return function () {
     $id = (int) route_param('id');
     return entity_save('article', [
         'id' => $id,
-        'title' => input('title'),
-        'body' => input('body'),
+        'title' => query_param('title'),
+        'body' => query_param('body'),
     ]);
 };
 ```
@@ -307,9 +371,9 @@ return function () {
 ```php
 <?php
 return function () {
-    $email = input('email');
-    $password = input('password');
-    $name = input('name');
+    $email = query_param('email');
+    $password = query_param('password');
+    $name = query_param('name');
 
     if (!$email || !$password || !$name) {
         return error(400, 'Name, email, and password required');
@@ -390,11 +454,11 @@ entity_query('article')
 ### Request Helpers
 
 ```php
-input('title')                    // get input value (GET, POST, or JSON body)
-input('page', 1)                  // with default
-input_has('title')                // check if key exists
-input_all()                       // all input as array
-input_file('avatar')              // uploaded file info
+query_param('title')                    // get input value (GET, POST, or JSON body)
+query_param('page', 1)                  // with default
+query_param_exists('title')                // check if key exists
+query_param_all()                       // all input as array
+query_param_file('avatar')              // uploaded file info
 route_param('id')                 // route parameter (:id from path)
 paginate_request(20)              // returns [$page, $perPage] from query params
 current_user()                    // authenticated user object or null
@@ -494,7 +558,7 @@ return [
 Define in `types.yml`:
 ```yaml
 article:
-  title: string, required=true
+  title*: string
   body: richtext
   $derived(slug): slugify
   $derived(reading_time): reading_time
@@ -848,7 +912,7 @@ When `entity_save` encounters validation errors, it returns:
 
 HTTP status is set to 422.
 
-**On create:** all `required=true` fields must be present (unless they have a `default`).
+**On create:** all required fields (marked with `*`) must be present (unless they have a `default`).
 **On update:** only provided fields are validated. Missing fields are not flagged.
 
 ---
@@ -879,15 +943,15 @@ return function () {
     [$page, $perPage] = paginate_request();
     $query = entity_query('article');
 
-    if (input_has('category')) {
-        $query->where('category', input('category'));
+    if (query_param_exists('category')) {
+        $query->where('category', query_param('category'));
     }
-    if (input_has('published')) {
-        $query->where('published', (bool) input('published'));
+    if (query_param_exists('published')) {
+        $query->where('published', (bool) query_param('published'));
     }
 
     return $query
-        ->sort(input('sort', 'created_at'), input('order', 'desc'))
+        ->sort(query_param('sort', 'created_at'), query_param('order', 'desc'))
         ->with('author')
         ->paginate($page, $perPage);
 };
@@ -907,7 +971,7 @@ return function () {
 
     return entity_save('article', [
         'id' => $article->id,
-        'title' => input('title'),
+        'title' => query_param('title'),
     ]);
 };
 ```
@@ -916,7 +980,7 @@ return function () {
 
 ```php
 return function () {
-    $ids = input('ids');  // array of IDs
+    $ids = query_param('ids');  // array of IDs
     if (!is_array($ids)) return error(400, 'ids must be an array');
 
     $results = [];

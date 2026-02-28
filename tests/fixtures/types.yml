@@ -1,12 +1,12 @@
 # Test types — safe to delete along with the entire tests/ directory.
 
 user:
-  name: string, required=true
-  email: email, required=true
+  name*: string
+  email*: email
   role: string, default=user
 
 article:
-  title: string, required=true
+  title*: string
   body: richtext
   published: boolean, default=false
   author: -> user
@@ -17,8 +17,8 @@ article:
   $derived(reading_time): reading_time
 
 page:
-  title: string, required=true
+  title*: string
   slug: string
 
 tag:
-  name: string, required=true
+  name*: string

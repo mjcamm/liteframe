@@ -1,0 +1,26 @@
+# Test types with $api() directives
+
+user:
+  name*: string
+  email*: email
+  role: string, default=user
+
+article:
+  title*: string
+  body: richtext
+  published: boolean, default=false
+  $api(list): public
+  $api(view): public
+  $api(create): auth
+  $api(update): auth
+  $api(delete): admin
+
+page:
+  title*: string
+  slug: string
+  $api(list): public
+  $api(view): public
+
+audit_log:
+  action: string
+  user_ref: -> user

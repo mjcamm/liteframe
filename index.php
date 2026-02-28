@@ -69,6 +69,7 @@ require_once __DIR__ . '/src/cron.php';
 require_once __DIR__ . '/src/files.php';
 require_once __DIR__ . '/src/cors.php';
 require_once __DIR__ . '/src/rate_limit.php';
+require_once __DIR__ . '/src/api.php';
 
 // Bootstrap
 $db = new Database(__DIR__ . '/data.db');
@@ -126,6 +127,9 @@ if (file_exists($routesFile)) {
     }
 }
 
+// Auto-generated routes from $api() directives (added after routes.yml so routes.yml takes priority)
+$apiRoutes = _lf_api_routes_from_types();
+
 // Add built-in routes
 $routes['auth_login'] = ['path' => '/api/auth/login', 'handler' => '_auth_login', 'method' => 'POST', 'auth' => 'false'];
 $routes['auth_refresh'] = ['path' => '/api/auth/refresh', 'handler' => '_auth_refresh', 'method' => 'POST', 'auth' => 'false'];
@@ -134,7 +138,12 @@ $routes['_lf_file_serve'] = ['path' => '/api/files/:id', 'handler' => '_lf_file_
 $routes['_lf_cron_run'] = ['path' => '/api/cron', 'handler' => '_lf_cron_run', 'method' => 'GET', 'auth' => 'false'];
 
 $router = new Router();
+// routes.yml + built-in first (takes priority over auto-generated)
 foreach ($routes as $name => $route) {
+    $router->addRoute($name, $route);
+}
+// Auto-generated $api() routes (only matched if no routes.yml route matched first)
+foreach ($apiRoutes as $name => $route) {
     $router->addRoute($name, $route);
 }
 
@@ -202,6 +211,12 @@ try {
             default => error(404, 'Unknown auth handler'),
         };
         echo json_encode($result);
+        return;
+    }
+
+    // Auto-generated $api() type handler
+    if (isset($matched_route['_type'])) {
+        echo json_encode(_lf_type_dispatch($matched_route));
         return;
     }
 

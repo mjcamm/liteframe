@@ -73,7 +73,6 @@ function _lf_parse_field(string $definition): array
         $key = trim($key);
         $value = trim($value);
         match ($key) {
-            'required' => $field['required'] = ($value === 'true'),
             'default' => $field['default'] = $value,
             'public' => $field['public'] = ($value === 'true'),
             default => null,
@@ -87,9 +86,10 @@ function _lf_parse_field(string $definition): array
 
 function _lf_parse_types(string $file): array
 {
-    global $DERIVED, $EFFECTS;
+    global $DERIVED, $EFFECTS, $API_DIRECTIVES;
     $DERIVED = [];
     $EFFECTS = [];
+    $API_DIRECTIVES = [];
     $types = [];
     $currentType = null;
 
@@ -104,6 +104,15 @@ function _lf_parse_types(string $file): array
 
         if ($currentType && str_contains($line, ':')) {
             $trimmed = trim($line);
+
+            // $api(action): permission
+            if (preg_match('/^\$api\((\w+)\):\s*(.+)$/', $trimmed, $m)) {
+                $action = $m[1];
+                if (in_array($action, ['list', 'view', 'create', 'update', 'delete'])) {
+                    $API_DIRECTIVES[$currentType][$action] = trim($m[2]);
+                }
+                continue;
+            }
 
             // $derived(field): function
             if (preg_match('/^\$derived\((\w+)\):\s*(\w+)/', $trimmed, $m)) {
@@ -120,7 +129,14 @@ function _lf_parse_types(string $file): array
             if (str_starts_with($trimmed, '$')) continue;
 
             [$name, $definition] = explode(':', $line, 2);
-            $types[$currentType][trim($name)] = _lf_parse_field(trim($definition));
+            $name = trim($name);
+            $field = _lf_parse_field(trim($definition));
+            // field_name* shorthand for required=true
+            if (str_ends_with($name, '*')) {
+                $name = rtrim($name, '*');
+                $field['required'] = true;
+            }
+            $types[$currentType][$name] = $field;
         }
     }
 

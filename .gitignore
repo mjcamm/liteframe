@@ -24,6 +24,7 @@ functions/*
 .idea/
 .claude/
 .vscode/
+CLAUDE.md
 *.swp
 *.swo
 

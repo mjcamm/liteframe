@@ -261,8 +261,8 @@ function _lf_auth_check_route(array $route): ?array
 
 function _lf_auth_handle_login(): array
 {
-    $email = input('email');
-    $password = input('password');
+    $email = query_param('email');
+    $password = query_param('password');
 
     if (!$email || !$password) {
         return error(400, 'Email and password required');
@@ -285,7 +285,7 @@ function _lf_auth_handle_login(): array
 
 function _lf_auth_handle_refresh(): array
 {
-    $refreshToken = input('refresh_token');
+    $refreshToken = query_param('refresh_token');
     if (!$refreshToken) {
         return error(400, 'Refresh token required');
     }
@@ -312,7 +312,7 @@ function _lf_auth_handle_refresh(): array
 
 function _lf_auth_handle_logout(): array
 {
-    $refreshToken = input('refresh_token');
+    $refreshToken = query_param('refresh_token');
     if ($refreshToken) {
         _lf_auth_revoke_refresh($refreshToken);
     }

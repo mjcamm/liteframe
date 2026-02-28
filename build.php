@@ -18,7 +18,7 @@ function liteframe_build(string $projectDir, string $distDir): string
     // --- Inline all src/ files ---
     // Order matters: Database first, then EntityQuery, then functions, then Router/Request
     // schema.php included for runtime _lf_schema_sync()
-    $srcOrder = ['Database.php', 'EntityQuery.php', 'Request.php', 'Router.php', 'hooks.php', 'derived.php', 'settings.php', 'auth.php', 'validation.php', 'variables.php', 'cron.php', 'functions.php', 'schema.php', 'files.php', 'cors.php', 'rate_limit.php'];
+    $srcOrder = ['Database.php', 'EntityQuery.php', 'Request.php', 'Router.php', 'hooks.php', 'derived.php', 'settings.php', 'auth.php', 'validation.php', 'variables.php', 'cron.php', 'functions.php', 'schema.php', 'files.php', 'cors.php', 'rate_limit.php', 'api.php'];
     $output[] = '// === FRAMEWORK ===';
     foreach ($srcOrder as $filename) {
         $file = $projectDir . '/src/' . $filename;
@@ -78,11 +78,12 @@ function liteframe_build(string $projectDir, string $distDir): string
     $output[] = '$TYPES = ' . var_export($types, true) . ';';
     $output[] = '';
 
-    // Compile derived and effects config (set by _lf_parse_types)
-    global $DERIVED, $EFFECTS;
+    // Compile derived, effects, and API directives config (set by _lf_parse_types)
+    global $DERIVED, $EFFECTS, $API_DIRECTIVES;
     $output[] = '// === COMPILED DERIVED & EFFECTS ===';
     $output[] = '$DERIVED = ' . var_export($DERIVED ?? [], true) . ';';
     $output[] = '$EFFECTS = ' . var_export($EFFECTS ?? [], true) . ';';
+    $output[] = '$API_DIRECTIVES = ' . var_export($API_DIRECTIVES ?? [], true) . ';';
     $output[] = '';
 
     // --- Parse and compile cron.yml ---
@@ -316,8 +317,18 @@ function liteframe_build(string $projectDir, string $distDir): string
     $output[] = '$ROUTES["_lf_cron_run"] = ["path" => "/api/cron", "handler" => "_lf_cron_run", "method" => "GET", "auth" => "false"];';
     $output[] = '';
 
+    // Auto-generated $api() routes
+    $output[] = '// Auto-generated $api() routes';
+    $output[] = '$_apiRoutes = _lf_api_routes_from_types();';
+    $output[] = '';
+
     $output[] = '$router = new Router();';
+    $output[] = '// routes.yml + built-in first (takes priority over auto-generated)';
     $output[] = 'foreach ($ROUTES as $name => $route) {';
+    $output[] = '    $router->addRoute($name, $route);';
+    $output[] = '}';
+    $output[] = '// Auto-generated $api() routes (only matched if no routes.yml route matched first)';
+    $output[] = 'foreach ($_apiRoutes as $name => $route) {';
     $output[] = '    $router->addRoute($name, $route);';
     $output[] = '}';
     $output[] = '';
@@ -394,6 +405,14 @@ function liteframe_build(string $projectDir, string $distDir): string
     $output[] = '        default => error(404, "Unknown auth handler"),';
     $output[] = '    };';
     $output[] = '    echo json_encode($result);';
+    $output[] = '    return;';
+    $output[] = '}';
+    $output[] = '';
+
+    // Auto-generated $api() type handler
+    $output[] = '// Auto-generated $api() type handler';
+    $output[] = 'if (isset($matched_route["_type"])) {';
+    $output[] = '    echo json_encode(_lf_type_dispatch($matched_route));';
     $output[] = '    return;';
     $output[] = '}';
     $output[] = '';
