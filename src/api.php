@@ -123,7 +123,7 @@ function _lf_type_handle_list(string $type): array
     // Filtering: ?filter[field]=value or ?filter[field]=value|OPERATOR
     // Supported operators: =, !=, >, <, >=, <=, CONTAINS, STARTS_WITH
     // Multiple filters on the same field: ?filter[field][]=value1|>=&filter[field][]=value2|<=
-    $filters = query_param('filter', []);
+    $filters = input('filter', []);
     if (is_array($filters)) {
         $typeFields = $TYPES[$type] ?? [];
         $systemFields = ['id', 'created_at', 'updated_at'];
@@ -140,7 +140,7 @@ function _lf_type_handle_list(string $type): array
 
     // Combined filter: ?combined_filter[field1,field2]=value|OPERATOR
     // Same syntax as filter but fields are comma-separated and OR'd together
-    $combinedFilters = query_param('combined_filter', []);
+    $combinedFilters = input('combined_filter', []);
     if (is_array($combinedFilters)) {
         $typeFields = $TYPES[$type] ?? [];
         $systemFields = ['id', 'created_at', 'updated_at'];
@@ -155,8 +155,8 @@ function _lf_type_handle_list(string $type): array
     }
 
     // Sorting: ?sort=field&order=desc (defaults to id desc)
-    $sort = query_param('sort', 'id');
-    $order = query_param('order', 'desc');
+    $sort = input('sort', 'id');
+    $order = input('order', 'desc');
 
     return $query
         ->sort($sort, $order)
@@ -175,13 +175,13 @@ function _lf_type_handle_get(string $type): array|object
 
 function _lf_type_handle_create(string $type): array|object
 {
-    return entity_save($type, query_param_all());
+    return entity_save($type, input_all());
 }
 
 function _lf_type_handle_update(string $type): array|object
 {
     $id = (int) route_param('id');
-    return entity_save($type, ['id' => $id] + query_param_all());
+    return entity_save($type, ['id' => $id] + input_all());
 }
 
 function _lf_type_handle_delete(string $type): array

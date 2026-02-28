@@ -370,9 +370,9 @@ return function () {
 <?php
 return function () {
     return entity_save('article', [
-        'title' => query_param('title'),
-        'body' => query_param('body', ''),
-        'published' => query_param('published', false),
+        'title' => input('title'),
+        'body' => input('body', ''),
+        'published' => input('published', false),
         'author' => current_user()->id,
     ]);
 };
@@ -417,8 +417,8 @@ return function () {
     $id = (int) route_param('id');
     return entity_save('article', [
         'id' => $id,
-        'title' => query_param('title'),
-        'body' => query_param('body'),
+        'title' => input('title'),
+        'body' => input('body'),
     ]);
 };
 ```
@@ -443,9 +443,9 @@ return function () {
 ```php
 <?php
 return function () {
-    $email = query_param('email');
-    $password = query_param('password');
-    $name = query_param('name');
+    $email = input('email');
+    $password = input('password');
+    $name = input('name');
 
     if (!$email || !$password || !$name) {
         return error(400, 'Name, email, and password required');
@@ -527,11 +527,11 @@ entity_query('article')
 ### Request Helpers
 
 ```php
-query_param('title')                    // get input value (GET, POST, or JSON body)
-query_param('page', 1)                  // with default
-query_param_exists('title')                // check if key exists
-query_param_all()                       // all input as array
-query_param_file('avatar')              // uploaded file info
+input('title')                    // get input value (GET, POST, or JSON body)
+input('page', 1)                  // with default
+input_exists('title')                // check if key exists
+input_all()                       // all input as array
+input_file('avatar')              // uploaded file info
 route_param('id')                 // route parameter (:id from path)
 paginate_request(20)              // returns [$page, $perPage] from query params
 current_user()                    // authenticated user object or null
@@ -1075,15 +1075,15 @@ return function () {
     [$page, $perPage] = paginate_request();
     $query = entity_query('article');
 
-    if (query_param_exists('category')) {
-        $query->where('category', query_param('category'));
+    if (input_exists('category')) {
+        $query->where('category', input('category'));
     }
-    if (query_param_exists('published')) {
-        $query->where('published', (bool) query_param('published'));
+    if (input_exists('published')) {
+        $query->where('published', (bool) input('published'));
     }
 
     return $query
-        ->sort(query_param('sort', 'created_at'), query_param('order', 'desc'))
+        ->sort(input('sort', 'created_at'), input('order', 'desc'))
         ->with('author')
         ->paginate($page, $perPage);
 };
@@ -1103,7 +1103,7 @@ return function () {
 
     return entity_save('article', [
         'id' => $article->id,
-        'title' => query_param('title'),
+        'title' => input('title'),
     ]);
 };
 ```
@@ -1112,7 +1112,7 @@ return function () {
 
 ```php
 return function () {
-    $ids = query_param('ids');  // array of IDs
+    $ids = input('ids');  // array of IDs
     if (!is_array($ids)) return error(400, 'ids must be an array');
 
     $results = [];

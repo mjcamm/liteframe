@@ -351,25 +351,25 @@ function entity_query(string $type): EntityQuery
 
 // --- Request helpers ---
 
-function query_param(string $key, mixed $default = null): mixed
+function input(string $key, mixed $default = null): mixed
 {
     global $request;
     return $request->get($key, $default);
 }
 
-function query_param_exists(string $key): bool
+function input_exists(string $key): bool
 {
     global $request;
     return $request->has($key);
 }
 
-function query_param_all(): array
+function input_all(): array
 {
     global $request;
     return $request->all();
 }
 
-function query_param_file(string $key): ?array
+function input_file(string $key): ?array
 {
     global $request;
     return $request->file($key);
@@ -389,8 +389,8 @@ function route_param(string $key): mixed
  */
 function paginate_request(int $defaultPerPage = 20): array
 {
-    $page = max(1, (int) query_param('page', 1));
-    $perPage = max(1, min(100, (int) query_param('per_page', $defaultPerPage)));
+    $page = max(1, (int) input('page', 1));
+    $perPage = max(1, min(100, (int) input('per_page', $defaultPerPage)));
     return [$page, $perPage];
 }
 

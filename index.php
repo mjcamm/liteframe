@@ -183,7 +183,7 @@ _lf_auth_authenticate_request();
 // Dev facade: impersonate a user via ?facade=<user_id> (dev mode only — never compiled into dist/)
 $_dev_facade_info = null;
 if (setting('dev_mode', false) && setting('allow_facade', false)) {
-    $facadeId = query_param('facade');
+    $facadeId = input('facade');
     if ($facadeId) {
         global $_current_user;
         $facadeUser = entity_load((int) $facadeId);
