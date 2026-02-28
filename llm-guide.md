@@ -65,6 +65,7 @@ Flat key-value pairs with one level of nesting. Comments with `#`.
 
 ```yaml
 dev_mode: true                    # true = load files directly, false = use compiled dist/
+allow_facade: true                # Dev only: enables ?facade=<user_id> to impersonate users
 token_expiry: 15m                 # JWT access token lifetime (m=minutes, h=hours, d=days)
 refresh_expiry: 30d               # Refresh token lifetime
 cron_key: my-secret-key           # Key for HTTP cron trigger (/api/cron?key=...)
@@ -206,11 +207,11 @@ audit_log:
 | Any role name (e.g. `admin`) | Requires JWT + that role (`auth: true, roles: admin`) |
 
 **Built-in handler behavior:**
-- **list** — returns paginated results (uses `paginate_request()`, supports `?page=` and `?per_page=`). Supports sorting via `?sort=field&order=asc|desc` (defaults to `id` desc). Supports filtering via `?filter[field]=value` for any field defined in the type schema (unknown fields are ignored)
 - **view** — returns the entity with all references eager-loaded (`['*']`), or 404
 - **create** — passes all input to `entity_save()` (validation, hooks, file uploads all apply)
 - **update** — passes input + route `:id` to `entity_save()` as an update
 - **delete** — calls `entity_delete()`, respects `before_delete` hooks that can block
+- **list** — paginated, filterable, sortable results. Full details below.
 
 **Override with routes.yml:** If you define a route in `routes.yml` that matches the same path and method as an auto-generated `$api()` route, the `routes.yml` route takes precedence. This lets you start with `$api()` and customize individual endpoints when needed.
 
@@ -218,6 +219,77 @@ audit_log:
 - Invalid action names (e.g. `$api(patch)`) are silently skipped
 - Duplicate actions on the same type — last one wins
 - Types without any `$api()` lines generate zero routes
+
+### $api(list) — Full Reference
+
+The list handler returns paginated, filtered, sorted results. Everything is controlled via query parameters — no custom handler code needed for most use cases.
+
+**Pagination:**
+```
+GET /api/article?page=2&per_page=10
+```
+Defaults to page 1, 20 per page. Response format:
+```json
+{
+  "data": [...],
+  "meta": { "page": 2, "per_page": 10, "total": 57, "total_pages": 6 }
+}
+```
+
+**Sorting:**
+```
+GET /api/article?sort=created_at&order=desc
+```
+Defaults to `sort=id&order=desc`. Any field name is accepted.
+
+**Filtering** with `filter` — each filter is AND'd together. Works on any field in the type schema plus `id`, `created_at`, and `updated_at`. Unknown fields are silently ignored.
+
+Exact match (no operator):
+```
+GET /api/article?filter[category]=news
+GET /api/article?filter[published]=1
+```
+
+With operator — append `|OPERATOR` after the value:
+```
+GET /api/article?filter[title]=hello|CONTAINS
+GET /api/article?filter[name]=John|STARTS_WITH
+GET /api/article?filter[views]=100|>
+GET /api/article?filter[status]=draft|!=
+```
+
+| Operator | SQL | Example |
+|----------|-----|---------|
+| *(none)* | `= value` | `filter[status]=active` |
+| `>` | `> value` | `filter[id]=10|>` |
+| `<` | `< value` | `filter[id]=10|<` |
+| `>=` | `>= value` | `filter[date]=2024-01-01|>=` |
+| `<=` | `<= value` | `filter[date]=2024-12-31|<=` |
+| `!=` | `!= value` | `filter[status]=draft|!=` |
+| `CONTAINS` | `LIKE %value%` | `filter[title]=hello|CONTAINS` |
+| `STARTS_WITH` | `LIKE value%` | `filter[name]=John|STARTS_WITH` |
+
+**Range filters** — use `[]` to apply multiple filters on the same field (e.g. date ranges):
+```
+GET /api/job?filter[date_completed][]=2024-01-01|>=&filter[date_completed][]=2024-12-31|<=
+```
+
+**Combined filter** with `combined_filter` — searches one value across multiple fields with OR. Field names are comma-separated in the key. Same pipe operators as `filter`.
+```
+GET /api/job?combined_filter[street,suburb,house_number]=king|CONTAINS
+```
+Generates: `WHERE (street LIKE '%king%' OR suburb LIKE '%king%' OR house_number LIKE '%king%')`
+
+Combined filters are AND'd with regular filters:
+```
+GET /api/job?combined_filter[street,suburb]=king|CONTAINS&filter[project]=Residential
+```
+Finds jobs where (street OR suburb contains "king") AND project is "Residential".
+
+**Full example** — paginated, sorted, filtered with date range and search:
+```
+GET /api/job?filter[project]=Residential&filter[date_completed][]=2024-01-01|>=&filter[date_completed][]=2024-12-31|<=&combined_filter[street,suburb]=king|CONTAINS&sort=date_completed&order=desc&page=1&per_page=25
+```
 
 ---
 
@@ -391,8 +463,8 @@ return function () {
 
     return [
         'user' => $user,
-        'token' => auth_token($user),
-        'refresh_token' => auth_refresh_token($user),
+        'token' => _lf_auth_token($user),
+        'refresh_token' => _lf_auth_refresh_token($user),
     ];
 };
 ```
@@ -432,6 +504,7 @@ entity_query('article')
     ->where('views', '>', 100)              // comparison operators: =, !=, <, >, <=, >=, LIKE
     ->where('deleted_at', null)             // IS NULL
     ->where('status', 'IS NOT', null)       // IS NOT NULL
+    ->whereRaw('date(created_at) = ?', ['2024-03-15'])  // raw SQL fragment with params
     ->sort('created_at', 'desc')            // ORDER BY
     ->limit(10)                             // LIMIT
     ->offset(20)                            // OFFSET
@@ -722,9 +795,9 @@ Passwords are **automatically bcrypt-hashed** when saving a user entity via `ent
 ### Auth Functions
 
 ```php
-auth_token($user)                // generate JWT access token
-auth_refresh_token($user)        // generate + store refresh token
-auth_validate_token($token)      // validate JWT, returns payload or null
+_lf_auth_token($user)            // generate JWT access token
+_lf_auth_refresh_token($user)    // generate + store refresh token
+_lf_auth_validate_token($token)  // validate JWT, returns payload or null
 current_user()                   // get authenticated user for current request
 ```
 
@@ -770,6 +843,57 @@ When rate limited (HTTP 429):
 ### System Table
 
 `_rate_limits` — stores per-IP hit counters with sliding windows. Expired entries are cleaned up automatically (~1% of requests trigger cleanup). Schema: `key TEXT PRIMARY KEY, hits INTEGER, window_start INTEGER`.
+
+---
+
+## User Facade (Dev Mode Only)
+
+Impersonate any user during development by adding `?facade=<user_id>` to API URLs. Auth still runs normally — if the facade user doesn't have permission, the request is blocked as expected. This lets you quickly test how different users experience each endpoint. This feature only exists in the dev-mode request flow (`index.php`) and is **never compiled into `dist/index.php`**.
+
+### Configuration
+
+In `settings.yml`:
+```yaml
+dev_mode: true             # Must be true
+allow_facade: true         # Enables ?facade= query param on API routes
+```
+
+Both `dev_mode` and `allow_facade` must be `true` for the facade to work.
+
+### Usage
+
+Append `?facade=<user_id>` to any API URL to make the request as that user:
+
+```
+GET /api/articles?facade=3        # Request as user ID 3
+GET /api/admin/stats?facade=1     # Test admin-only endpoint as user ID 1
+```
+
+- The user ID must refer to a real user entity in the database
+- If the ID doesn't exist or isn't a user, `current_user()` remains `null`
+- Auth checks run normally — if the facade user lacks permission, you get a 401/403 as expected
+- Without `?facade=`, requests behave exactly as normal
+
+### Response Format
+
+When a facade is active, a `_DEV` key is prepended to every API response:
+
+```json
+{
+  "_DEV": {
+    "NOTICE": "FACADE ACTIVE — REQUEST IS BEING MADE AS ANOTHER USER",
+    "facade_user": { "id": 3, "email": "admin@example.com", "role": "admin" }
+  },
+  "data": [...],
+  "meta": { ... }
+}
+```
+
+This also appears on blocked responses (401/403), so you can see which user was attempted.
+
+### Production Safety
+
+This feature is completely absent from compiled production builds. The `build.php` compiler generates its own auth flow that has no facade support.
 
 ---
 
@@ -842,10 +966,10 @@ $db->transaction(function ($db) {
 ### Compile
 
 ```bash
-php build.php
+php liteframe build          # Build backend + frontend
+php liteframe build:back     # Build PHP backend only → dist/index.php
+php liteframe build:front    # Build frontend only (npm run build)
 ```
-
-Or hit `build.php` in the browser during development.
 
 This produces a `dist/` folder ready to deploy:
 ```
@@ -937,6 +1061,14 @@ These are created automatically:
 ## Common Patterns
 
 ### Filtering + Sorting + Pagination
+
+For most cases, `$api(list)` handles this automatically via query parameters — no custom handler needed:
+
+```
+GET /api/article?filter[category]=news&filter[published]=1&sort=created_at&order=desc&page=1&per_page=10
+```
+
+For custom filtering logic beyond what `$api(list)` supports, write a handler:
 
 ```php
 return function () {

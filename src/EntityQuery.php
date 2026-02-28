@@ -55,6 +55,13 @@ class EntityQuery
         return $this;
     }
 
+    public function whereRaw(string $sql, array $params = []): self
+    {
+        $this->wheres[] = $sql;
+        array_push($this->params, ...$params);
+        return $this;
+    }
+
     public function sort(string $field, string $direction = 'asc'): self
     {
         _lf_validate_identifier($field);

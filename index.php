@@ -180,11 +180,40 @@ if (!_lf_rate_limit_check($matched_route['handler'])) {
 // Authenticate request (reads JWT from Authorization header)
 _lf_auth_authenticate_request();
 
-// Check route auth
+// Dev facade: impersonate a user via ?facade=<user_id> (dev mode only — never compiled into dist/)
+$_dev_facade_info = null;
+if (setting('dev_mode', false) && setting('allow_facade', false)) {
+    $facadeId = query_param('facade');
+    if ($facadeId) {
+        global $_current_user;
+        $facadeUser = entity_load((int) $facadeId);
+        if ($facadeUser && ($facadeUser->_type ?? null) === 'user') {
+            $_current_user = $facadeUser;
+            $_dev_facade_info = [
+                'NOTICE' => 'FACADE ACTIVE — REQUEST IS BEING MADE AS ANOTHER USER',
+                'facade_user' => ['id' => $facadeUser->id, 'email' => $facadeUser->email ?? null, 'role' => $facadeUser->role ?? null],
+            ];
+        }
+    }
+}
+
+// Check route auth (blocks normally even with facade)
 $authError = _lf_auth_check_route($matched_route);
 if ($authError) {
+    if ($_dev_facade_info) {
+        $authError = ['_DEV' => $_dev_facade_info] + $authError;
+    }
     echo json_encode($authError);
     return;
+}
+
+// Helper to prepend _DEV facade info to API responses
+function _lf_dev_response($data): string {
+    global $_dev_facade_info;
+    if ($_dev_facade_info && is_array($data)) {
+        $data = ['_DEV' => $_dev_facade_info] + $data;
+    }
+    return json_encode($data);
 }
 
 // Dispatch handler (all wrapped in exception handler)
@@ -198,7 +227,7 @@ try {
 
     // Built-in cron handler
     if ($handler_name === '_lf_cron_run') {
-        echo json_encode(_lf_cron_handle_run());
+        echo _lf_dev_response(_lf_cron_handle_run());
         return;
     }
 
@@ -210,13 +239,13 @@ try {
             '_auth_logout' => _lf_auth_handle_logout(),
             default => error(404, 'Unknown auth handler'),
         };
-        echo json_encode($result);
+        echo _lf_dev_response($result);
         return;
     }
 
     // Auto-generated $api() type handler
     if (isset($matched_route['_type'])) {
-        echo json_encode(_lf_type_dispatch($matched_route));
+        echo _lf_dev_response(_lf_type_dispatch($matched_route));
         return;
     }
 
@@ -224,10 +253,10 @@ try {
     $handlerFile = __DIR__ . '/handlers/' . $handler_name . '.php';
     if (file_exists($handlerFile)) {
         $handler = require $handlerFile;
-        echo json_encode($handler());
+        echo _lf_dev_response($handler());
     } else {
         http_response_code(500);
-        echo json_encode(['error' => "Handler not found: {$handler_name}"]);
+        echo _lf_dev_response(['error' => "Handler not found: {$handler_name}"]);
     }
 } catch (\Throwable $e) {
     http_response_code(500);
@@ -236,5 +265,5 @@ try {
         $response['message'] = $e->getMessage();
         $response['file'] = $e->getFile() . ':' . $e->getLine();
     }
-    echo json_encode($response);
+    echo _lf_dev_response($response);
 }

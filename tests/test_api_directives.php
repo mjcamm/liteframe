@@ -181,4 +181,113 @@ $dispatchResult = _lf_type_dispatch($matched_route);
 assert(isset($dispatchResult['data']));
 echo "[PASS] _lf_type_dispatch routes to correct handler\n";
 
+// --- Test 7: Filter with pipe operators ---
+$TYPES = _lf_parse_types(__DIR__ . '/fixtures/types_api.yml');
+$db = new Database(':memory:');
+_lf_schema_apply($db, $TYPES);
+
+entity_save('article', ['title' => 'Alpha Article', 'body' => 'first post', 'published' => true]);
+entity_save('article', ['title' => 'Beta Article', 'body' => 'second post', 'published' => false]);
+entity_save('article', ['title' => 'Gamma Guide', 'body' => 'third post', 'published' => true]);
+
+// Grab actual IDs for comparison/range tests
+$allIds = array_map(fn($e) => $e->id, entity_query('article')->sort('id', 'asc')->get());
+$firstId = $allIds[0];
+$secondId = $allIds[1];
+$thirdId = $allIds[2];
+
+// Exact match (no pipe)
+$_GET = ['filter' => ['published' => '1']];
+$request = new Request();
+$result = _lf_type_handle_list('article');
+assert($result['meta']['total'] === 2, 'Exact filter: 2 published articles');
+echo "[PASS] Filter exact match: filter[published]=1\n";
+
+// CONTAINS operator
+$_GET = ['filter' => ['title' => 'Article|CONTAINS']];
+$request = new Request();
+$result = _lf_type_handle_list('article');
+assert($result['meta']['total'] === 2, 'CONTAINS filter: 2 articles with "Article" in title');
+echo "[PASS] Filter CONTAINS: filter[title]=Article|CONTAINS\n";
+
+// STARTS_WITH operator
+$_GET = ['filter' => ['title' => 'Gamma|STARTS_WITH']];
+$request = new Request();
+$result = _lf_type_handle_list('article');
+assert($result['meta']['total'] === 1, 'STARTS_WITH filter: 1 article starting with "Gamma"');
+echo "[PASS] Filter STARTS_WITH: filter[title]=Gamma|STARTS_WITH\n";
+
+// Comparison operator
+$_GET = ['filter' => ['id' => "{$secondId}|>"]];
+$request = new Request();
+$result = _lf_type_handle_list('article');
+assert($result['meta']['total'] === 1, 'Greater than filter: 1 article with id > secondId');
+echo "[PASS] Filter comparison: filter[id]={$secondId}|>\n";
+
+// Multiple filters on same field (date range style) using [] syntax
+$_GET = ['filter' => ['id' => ["{$firstId}|>=", "{$secondId}|<="]]];
+$request = new Request();
+$result = _lf_type_handle_list('article');
+assert($result['meta']['total'] === 2, 'Range filter: 2 articles with id >= first AND id <= second');
+echo "[PASS] Filter range: filter[id][]={$firstId}|>=&filter[id][]={$secondId}|<=\n";
+
+// Invalid operator is silently skipped (no filter applied)
+$_GET = ['filter' => ['title' => 'test|INVALID']];
+$request = new Request();
+$result = _lf_type_handle_list('article');
+assert($result['meta']['total'] === 3, 'Invalid operator skipped: all 3 articles returned');
+echo "[PASS] Invalid operator silently skipped\n";
+
+// Unknown field is ignored
+$_GET = ['filter' => ['nonexistent' => 'test']];
+$request = new Request();
+$result = _lf_type_handle_list('article');
+assert($result['meta']['total'] === 3, 'Unknown field ignored: all 3 articles returned');
+echo "[PASS] Unknown filter field ignored\n";
+
+// --- Test 8: Combined filter (OR across fields) ---
+
+// Search across title and body with CONTAINS
+$_GET = ['combined_filter' => ['title,body' => 'Alpha|CONTAINS']];
+$request = new Request();
+$result = _lf_type_handle_list('article');
+assert($result['meta']['total'] === 1, 'Combined filter: 1 article with "Alpha" in title or body');
+echo "[PASS] Combined filter: combined_filter[title,body]=Alpha|CONTAINS\n";
+
+// "post" appears in body of all 3 articles
+$_GET = ['combined_filter' => ['title,body' => 'post|CONTAINS']];
+$request = new Request();
+$result = _lf_type_handle_list('article');
+assert($result['meta']['total'] === 3, 'Combined filter: 3 articles with "post" in title or body');
+echo "[PASS] Combined filter OR: matches across body field\n";
+
+// "Guide" is in title of one, "first" is in body of another — OR finds both
+$_GET = ['combined_filter' => ['title,body' => 'Guide|CONTAINS']];
+$request = new Request();
+$result = _lf_type_handle_list('article');
+$guideCount = $result['meta']['total'];
+$_GET = ['combined_filter' => ['title,body' => 'first|CONTAINS']];
+$request = new Request();
+$result = _lf_type_handle_list('article');
+$firstCount = $result['meta']['total'];
+assert($guideCount === 1 && $firstCount === 1, 'Combined filter finds matches in different fields');
+echo "[PASS] Combined filter finds matches in different fields\n";
+
+// Combined filter with regular filter (AND between them)
+$_GET = ['filter' => ['published' => '1'], 'combined_filter' => ['title,body' => 'Article|CONTAINS']];
+$request = new Request();
+$result = _lf_type_handle_list('article');
+assert($result['meta']['total'] === 1, 'Combined + regular filter: 1 published article with "Article"');
+echo "[PASS] Combined filter works with regular filter (AND)\n";
+
+// Unknown fields in combined filter are skipped
+$_GET = ['combined_filter' => ['nonexistent,title' => 'Alpha|CONTAINS']];
+$request = new Request();
+$result = _lf_type_handle_list('article');
+assert($result['meta']['total'] === 1, 'Combined filter: unknown fields skipped, valid ones still work');
+echo "[PASS] Combined filter skips unknown fields\n";
+
+// Clean up
+$_GET = [];
+
 echo "\n=== All API directive tests passed ===\n";

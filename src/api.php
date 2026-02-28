@@ -55,20 +55,102 @@ function _lf_api_routes_from_types(): array
 
 // --- Built-in CRUD handlers ---
 
+function _lf_api_apply_filter(EntityQuery $query, string $field, string $raw): void
+{
+    // Check for pipe-separated operator: value|OPERATOR
+    if (str_contains($raw, '|')) {
+        $pipePos = strrpos($raw, '|');
+        $value = substr($raw, 0, $pipePos);
+        $op = strtoupper(trim(substr($raw, $pipePos + 1)));
+
+        $allowed = ['=', '!=', '>', '<', '>=', '<=', 'CONTAINS', 'STARTS_WITH'];
+        if (!in_array($op, $allowed, true)) {
+            return; // Invalid operator, skip silently
+        }
+
+        if ($op === 'CONTAINS') {
+            $query->where($field, 'LIKE', '%' . $value . '%');
+        } elseif ($op === 'STARTS_WITH') {
+            $query->where($field, 'LIKE', $value . '%');
+        } else {
+            $query->where($field, $op, $value);
+        }
+    } else {
+        // No pipe — exact match
+        $query->where($field, $raw);
+    }
+}
+
+function _lf_api_apply_combined_filter(EntityQuery $query, array $fields, string $raw): void
+{
+    // Parse pipe operator (same as regular filter)
+    $op = '=';
+    $value = $raw;
+    if (str_contains($raw, '|')) {
+        $pipePos = strrpos($raw, '|');
+        $value = substr($raw, 0, $pipePos);
+        $op = strtoupper(trim(substr($raw, $pipePos + 1)));
+    }
+
+    $allowed = ['=', '!=', '>', '<', '>=', '<=', 'CONTAINS', 'STARTS_WITH'];
+    if (!in_array($op, $allowed, true)) return;
+
+    $clauses = [];
+    $params = [];
+    foreach ($fields as $field) {
+        _lf_validate_identifier($field);
+        if ($op === 'CONTAINS') {
+            $clauses[] = "{$field} LIKE ?";
+            $params[] = '%' . $value . '%';
+        } elseif ($op === 'STARTS_WITH') {
+            $clauses[] = "{$field} LIKE ?";
+            $params[] = $value . '%';
+        } else {
+            $clauses[] = "{$field} {$op} ?";
+            $params[] = $value;
+        }
+    }
+
+    $query->whereRaw('(' . implode(' OR ', $clauses) . ')', $params);
+}
+
 function _lf_type_handle_list(string $type): array
 {
     global $TYPES;
     [$page, $perPage] = paginate_request();
     $query = entity_query($type);
 
-    // Filtering: ?filter[field]=value (only allows known fields)
+    // Filtering: ?filter[field]=value or ?filter[field]=value|OPERATOR
+    // Supported operators: =, !=, >, <, >=, <=, CONTAINS, STARTS_WITH
+    // Multiple filters on the same field: ?filter[field][]=value1|>=&filter[field][]=value2|<=
     $filters = query_param('filter', []);
     if (is_array($filters)) {
         $typeFields = $TYPES[$type] ?? [];
-        foreach ($filters as $field => $value) {
-            if (!isset($typeFields[$field])) continue;
+        $systemFields = ['id', 'created_at', 'updated_at'];
+        foreach ($filters as $field => $values) {
+            if (!isset($typeFields[$field]) && !in_array($field, $systemFields, true)) continue;
+            // Normalize single value to array so both syntaxes go through the same path
+            if (!is_array($values)) $values = [$values];
+            foreach ($values as $value) {
+                if ($value === '') continue;
+                _lf_api_apply_filter($query, $field, $value);
+            }
+        }
+    }
+
+    // Combined filter: ?combined_filter[field1,field2]=value|OPERATOR
+    // Same syntax as filter but fields are comma-separated and OR'd together
+    $combinedFilters = query_param('combined_filter', []);
+    if (is_array($combinedFilters)) {
+        $typeFields = $TYPES[$type] ?? [];
+        $systemFields = ['id', 'created_at', 'updated_at'];
+        foreach ($combinedFilters as $fieldList => $value) {
             if ($value === '') continue;
-            $query->where($field, $value);
+            $fields = array_map('trim', explode(',', $fieldList));
+            // Validate all fields exist
+            $validFields = array_filter($fields, fn($f) => isset($typeFields[$f]) || in_array($f, $systemFields, true));
+            if (empty($validFields)) continue;
+            _lf_api_apply_combined_filter($query, $validFields, $value);
         }
     }
 

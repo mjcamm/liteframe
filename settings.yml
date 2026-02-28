@@ -1,6 +1,7 @@
 # LiteFrame Settings
 
 dev_mode: true
+allow_facade: true
 
 token_expiry: 15m
 refresh_expiry: 30d
