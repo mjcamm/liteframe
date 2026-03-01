@@ -4,7 +4,7 @@
 
 ## What Is LiteFrame?
 
-A PHP micro-framework with zero external dependencies. SQLite database, procedural functions, YAML config, JWT auth, file uploads, and single-file compilation for production. Pair it with any frontend SPA (SvelteKit, React, Vue, etc).
+A PHP micro-framework with zero external dependencies. SQLite database, static class API (`LF::`), YAML config, JWT auth, file uploads, and single-file compilation for production. Pair it with any frontend SPA (SvelteKit, React, Vue, etc).
 
 **Key properties:**
 - No Composer, no vendor directory — pure PHP 8.1+ with PDO SQLite
@@ -28,22 +28,28 @@ project/
     routes.yml           # API route definitions
     cron.yml             # Scheduled task definitions
   src/                   # Framework source (do not modify)
+    LF.php               # Main LF class (loads traits)
     Database.php         # SQLite wrapper
     EntityQuery.php      # Chainable query builder
     Router.php           # URL matching
     Request.php          # Request parsing
-    auth.php             # JWT auth system
-    validation.php       # Field validation
-    schema.php           # Schema parser + auto-migration
-    files.php            # File upload handling
-    hooks.php            # Entity lifecycle hooks
-    derived.php          # Computed fields + effects
-    cron.php             # Task scheduling
-    cors.php             # CORS headers
-    settings.php         # Settings parser
-    variables.php        # Key-value store
-    functions.php        # Core entity CRUD + helpers
-    api.php              # $api() route generation + CRUD handlers
+    traits/              # LF class traits (16 files)
+      LFEntity.php       # CRUD operations
+      LFAuth.php         # JWT auth system
+      LFSchema.php       # Schema parser + auto-migration
+      LFValidation.php   # Field validation
+      LFFiles.php        # File upload handling
+      LFHooks.php        # Entity lifecycle hooks
+      LFDerived.php      # Computed fields + effects
+      LFSettings.php     # Settings parser
+      LFVariables.php    # Key-value store
+      LFRequest.php      # Input helpers
+      LFResponse.php     # Error responses
+      LFCron.php         # Task scheduling
+      LFCors.php         # CORS headers
+      LFRateLimit.php    # Rate limiting
+      LFApi.php          # $api() route generation + CRUD handlers
+      LFBootstrap.php    # Bootstrap + dispatch
   handlers/              # Route handler files (one per route)
   hooks/                 # Entity lifecycle hooks (one per type)
   functions/             # User-defined functions (derived, effects, cron)
@@ -83,10 +89,10 @@ cors:
 
 **Reading settings in code:**
 ```php
-setting('dev_mode')           // true
-setting('uploads.max_size')   // '10M'
-setting('cors.origin')        // '*'
-setting('missing_key', 'default')  // 'default'
+LF::setting('dev_mode')           // true
+LF::setting('uploads.max_size')   // '10M'
+LF::setting('cors.origin')        // '*'
+LF::setting('missing_key', 'default')  // 'default'
 ```
 
 ---
@@ -208,9 +214,9 @@ audit_log:
 
 **Built-in handler behavior:**
 - **view** — returns the entity with all references eager-loaded (`['*']`), or 404
-- **create** — passes all input to `entity_save()` (validation, hooks, file uploads all apply)
-- **update** — passes input + route `:id` to `entity_save()` as an update
-- **delete** — calls `entity_delete()`, respects `before_delete` hooks that can block
+- **create** — passes all input to `LF::save()` (validation, hooks, file uploads all apply)
+- **update** — passes input + route `:id` to `LF::save()` as an update
+- **delete** — calls `LF::delete()`, respects `before_delete` hooks that can block
 - **list** — paginated, filterable, sortable results. Full details below.
 
 **Override with routes.yml:** If you define a route in `routes.yml` that matches the same path and method as an auto-generated `$api()` route, the `routes.yml` route takes precedence. This lets you start with `$api()` and customize individual endpoints when needed.
@@ -247,7 +253,7 @@ Response: { "user": {...}, "token": "jwt...", "refresh_token": "hex..." }
 ```
 
 **Update (`$api(update)`) on user:**
-- **Ownership enforced** — users can only update their own account (`current_user()->id` must match `:id`). Returns 403 otherwise.
+- **Ownership enforced** — users can only update their own account (`LF::user()->id` must match `:id`). Returns 403 otherwise.
 - **Duplicate email check** — if email is being changed, checks it's not taken by another user. Keeping your own email is fine.
 - **Role always stripped** — same as create, role cannot be changed through `$api()`.
 
@@ -260,10 +266,10 @@ Response: { "user": {...}, "token": "jwt...", "refresh_token": "hex..." }
 // handlers/promote_user.php
 <?php
 return function () {
-    $id = (int) route_param('id');
-    return entity_save('user', [
+    $id = (int) LF::route_param('id');
+    return LF::save('user', [
         'id' => $id,
-        'role' => input('role'),
+        'role' => LF::input('role'),
     ]);
 };
 ```
@@ -277,7 +283,7 @@ promote_user:
   auth: admin
 ```
 
-Custom handlers bypass all `$api()` safety handling — they call `entity_save()` directly with full control.
+Custom handlers bypass all `$api()` safety handling — they call `LF::save()` directly with full control.
 
 ### $api(list) — Full Reference
 
@@ -377,7 +383,7 @@ user_profile:
 
 **Important:**
 - Paths are automatically prefixed with `/api/`
-- Route parameters (`:id`, `:slug`, etc) are accessed via `route_param('id')` in handlers
+- Route parameters (`:id`, `:slug`, etc) are accessed via `LF::route_param('id')` in handlers
 - `auth` is **required** on every route — omitting it returns a 500 error
 - `auth: public` — no authentication required
 - `auth: auth` — requires valid JWT in Authorization header
@@ -418,7 +424,7 @@ Each handler is a PHP file in `handlers/` that returns a closure. The closure re
 ```php
 <?php
 return function () {
-    return entity_query('article')
+    return LF::query('article')
         ->sort('id', 'desc')
         ->get();
 };
@@ -428,11 +434,11 @@ return function () {
 ```php
 <?php
 return function () {
-    return entity_save('article', [
-        'title' => input('title'),
-        'body' => input('body', ''),
-        'published' => input('published', false),
-        'author' => current_user()->id,
+    return LF::save('article', [
+        'title' => LF::input('title'),
+        'body' => LF::input('body', ''),
+        'published' => LF::input('published', false),
+        'author' => LF::user()->id,
     ]);
 };
 ```
@@ -441,10 +447,10 @@ return function () {
 ```php
 <?php
 return function () {
-    $id = (int) route_param('id');
-    $article = entity_load($id, ['author', 'tags']);
+    $id = (int) LF::route_param('id');
+    $article = LF::load($id, ['author', 'tags']);
     if (!$article) {
-        return error(404, 'Article not found');
+        return LF::error(404, 'Article not found');
     }
     return $article;
 };
@@ -454,8 +460,8 @@ return function () {
 ```php
 <?php
 return function () {
-    [$page, $perPage] = paginate_request(20);
-    return entity_query('article')
+    [$page, $perPage] = LF::paginate(20);
+    return LF::query('article')
         ->where('published', true)
         ->sort('publish_date', 'desc')
         ->paginate($page, $perPage);
@@ -473,11 +479,11 @@ Returns:
 ```php
 <?php
 return function () {
-    $id = (int) route_param('id');
-    return entity_save('article', [
+    $id = (int) LF::route_param('id');
+    return LF::save('article', [
         'id' => $id,
-        'title' => input('title'),
-        'body' => input('body'),
+        'title' => LF::input('title'),
+        'body' => LF::input('body'),
     ]);
 };
 ```
@@ -486,10 +492,10 @@ return function () {
 ```php
 <?php
 return function () {
-    $id = (int) route_param('id');
-    $result = entity_delete($id);
+    $id = (int) LF::route_param('id');
+    $result = LF::delete($id);
     if ($result === false) {
-        return error(404, 'Not found');
+        return LF::error(404, 'Not found');
     }
     if (is_array($result)) {
         return $result; // blocked by hook
@@ -508,19 +514,19 @@ If you need custom registration logic (e.g. sending a welcome email, invite code
 ```php
 <?php
 return function () {
-    $email = input('email');
-    $password = input('password');
-    $name = input('name');
+    $email = LF::input('email');
+    $password = LF::input('password');
+    $name = LF::input('name');
 
     if (!$email || !$password || !$name) {
-        return error(400, 'Name, email, and password required');
+        return LF::error(400, 'Name, email, and password required');
     }
 
-    if (entity_load_by('user', 'email', $email)) {
-        return error(409, 'Email already registered');
+    if (LF::load_by('user', 'email', $email)) {
+        return LF::error(409, 'Email already registered');
     }
 
-    $user = entity_save('user', [
+    $user = LF::save('user', [
         'name' => $name,
         'email' => $email,
         'password' => $password,  // auto-hashed by framework
@@ -544,28 +550,28 @@ return function () {
 
 ```php
 // Create — returns entity object or validation error array
-entity_save('article', ['title' => 'Hello', 'body' => '...']);
+LF::save('article', ['title' => 'Hello', 'body' => '...']);
 
 // Update — include 'id' in data
-entity_save('article', ['id' => 5, 'title' => 'Updated Title']);
+LF::save('article', ['id' => 5, 'title' => 'Updated Title']);
 
 // Load by ID (globally unique, no type needed)
-entity_load(5);                         // basic load
-entity_load(5, ['author']);             // eager-load author reference
-entity_load(5, ['author', 'tags']);     // eager-load multiple
-entity_load(5, ['*']);                  // eager-load ALL references
+LF::load(5);                         // basic load
+LF::load(5, ['author']);             // eager-load author reference
+LF::load(5, ['author', 'tags']);     // eager-load multiple
+LF::load(5, ['*']);                  // eager-load ALL references
 
 // Load by field value (type required)
-entity_load_by('user', 'email', 'user@example.com');
+LF::load_by('user', 'email', 'user@example.com');
 
 // Delete by ID
-entity_delete(5);   // returns true, false (not found), or error array (blocked by hook)
+LF::delete(5);   // returns true, false (not found), or error array (blocked by hook)
 ```
 
 ### Entity Query Builder
 
 ```php
-entity_query('article')
+LF::query('article')
     ->where('published', true)              // field = value
     ->where('category', 'news')             // AND field = value
     ->where('views', '>', 100)              // comparison operators: =, !=, <, >, <=, >=, LIKE
@@ -579,13 +585,13 @@ entity_query('article')
     ->get();                                // returns array of entities
 
 // Single result
-entity_query('article')->where('slug', 'hello-world')->first();  // returns object or null
+LF::query('article')->where('slug', 'hello-world')->first();  // returns object or null
 
 // Count
-entity_query('article')->where('published', true)->count();  // returns int
+LF::query('article')->where('published', true)->count();  // returns int
 
 // Paginate
-entity_query('article')
+LF::query('article')
     ->where('published', true)
     ->sort('created_at', 'desc')
     ->paginate($page, $perPage);  // returns {data: [...], meta: {page, per_page, total, total_pages}}
@@ -594,23 +600,23 @@ entity_query('article')
 ### Request Helpers
 
 ```php
-input('title')                    // get input value (GET, POST, or JSON body)
-input('page', 1)                  // with default
-input_exists('title')                // check if key exists
-input_all()                       // all input as array
-input_file('avatar')              // uploaded file info
-route_param('id')                 // route parameter (:id from path)
-paginate_request(20)              // returns [$page, $perPage] from query params
-current_user()                    // authenticated user object or null
+LF::input('title')               // get input value (GET, POST, or JSON body)
+LF::input('page', 1)             // with default
+LF::input_exists('title')        // check if key exists
+LF::input_all()                  // all input as array
+LF::input_file('avatar')         // uploaded file info
+LF::route_param('id')            // route parameter (:id from path)
+LF::paginate(20)                 // returns [$page, $perPage] from query params
+LF::user()                       // authenticated user object or null
 ```
 
 ### Response Helpers
 
 ```php
-error(404, 'Not found')           // sets HTTP status, returns ['error' => 'Not found']
-error(400, 'Bad request')
-error(401, 'Authentication required')
-error(403, 'Insufficient permissions')
+LF::error(404, 'Not found')           // sets HTTP status, returns ['error' => 'Not found']
+LF::error(400, 'Bad request')
+LF::error(401, 'Authentication required')
+LF::error(403, 'Insufficient permissions')
 ```
 
 ### Variables (Key-Value Store)
@@ -618,14 +624,14 @@ error(403, 'Insufficient permissions')
 Persistent storage for app state. Values are JSON-encoded, so any type works.
 
 ```php
-variable_set('site_name', 'My Site');
-variable_get('site_name');                  // 'My Site'
-variable_get('missing', 'default');         // 'default'
-variable_del('site_name');
+LF::variable_set('site_name', 'My Site');
+LF::variable_get('site_name');                  // 'My Site'
+LF::variable_get('missing', 'default');         // 'default'
+LF::variable_del('site_name');
 
 // Works with any JSON-serializable value
-variable_set('config', ['theme' => 'dark', 'lang' => 'en']);
-variable_get('config');  // ['theme' => 'dark', 'lang' => 'en']
+LF::variable_set('config', ['theme' => 'dark', 'lang' => 'en']);
+LF::variable_get('config');  // ['theme' => 'dark', 'lang' => 'en']
 ```
 
 ---
@@ -663,10 +669,10 @@ return [
         // compare $entity with $original to see what changed
     },
 
-    // Block deletion — return error() to prevent
+    // Block deletion — return LF::error() to prevent
     'before_delete' => function (object $entity) {
         if ($entity->published) {
-            return error(400, 'Cannot delete a published article');
+            return LF::error(400, 'Cannot delete a published article');
         }
     },
 
@@ -684,7 +690,7 @@ return [
 ```
 
 **Hook rules:**
-- `before_create` and `before_update`: return the (possibly modified) data array, or return `error(code, message)` to block the operation
+- `before_create` and `before_update`: return the (possibly modified) data array, or return `LF::error(code, message)` to block the operation
 - `on_load`: must return the entity object
 - Other hooks: return value is ignored
 - You only need to include the events you want — omit the rest
@@ -728,7 +734,7 @@ function reading_time(object $entity): int
 }
 ```
 
-**Properties:** Derived fields are computed fresh on every `entity_load`, `entity_load_by`, and `entity_query` call. They are never stored in the database. They appear as regular properties on the entity object.
+**Properties:** Derived fields are computed fresh on every `LF::load`, `LF::load_by`, and `LF::query` call. They are never stored in the database. They appear as regular properties on the entity object.
 
 ### Effects (Side Effects on Field Change)
 
@@ -753,7 +759,7 @@ function on_publish(object $entity, mixed $old_value, mixed $new_value): void
 }
 ```
 
-**Properties:** Effects fire after `entity_save` completes. On create, `$old_value` is null. On update, it only fires if the watched field actually changed value.
+**Properties:** Effects fire after `LF::save` completes. On create, `$old_value` is null. On update, it only fires if the watched field actually changed value.
 
 ---
 
@@ -771,7 +777,7 @@ article:
 ### How It Works
 
 1. Client sends `multipart/form-data` with file fields matching the field names
-2. `entity_save` automatically processes uploads — validates size/type, stores file, records in `_files` table
+2. `LF::save` automatically processes uploads — validates size/type, stores file, records in `_files` table
 3. On entity load, file fields are resolved to objects:
 
 ```json
@@ -849,7 +855,7 @@ Response: { "message": "Logged out" }
 ### Auth in Handlers
 
 ```php
-$user = current_user();          // authenticated user or null
+$user = LF::user();             // authenticated user or null
 $user->id;                       // user ID
 $user->role;                     // user role string
 $user->email;                    // etc.
@@ -857,7 +863,7 @@ $user->email;                    // etc.
 
 ### Password Handling
 
-Passwords are **automatically bcrypt-hashed** when saving a user entity via `entity_save('user', [...])`. The password field is **automatically stripped** from all entity load operations — it never appears in API responses.
+Passwords are **automatically bcrypt-hashed** when saving a user entity via `LF::save('user', [...])`. The password field is **automatically stripped** from all entity load operations — it never appears in API responses.
 
 ### Auth Functions
 
@@ -865,7 +871,7 @@ Passwords are **automatically bcrypt-hashed** when saving a user entity via `ent
 _lf_auth_token($user)            // generate JWT access token
 _lf_auth_refresh_token($user)    // generate + store refresh token
 _lf_auth_validate_token($token)  // validate JWT, returns payload or null
-current_user()                   // get authenticated user for current request
+LF::user()                       // get authenticated user for current request
 ```
 
 ### JWT Secret
@@ -937,7 +943,7 @@ GET /api/admin/stats?facade=1     # Test admin-only endpoint as user ID 1
 ```
 
 - The user ID must refer to a real user entity in the database
-- If the ID doesn't exist or isn't a user, `current_user()` remains `null`
+- If the ID doesn't exist or isn't a user, `LF::user()` remains `null`
 - Auth checks run normally — if the facade user lacks permission, you get a 401/403 as expected
 - Without `?facade=`, requests behave exactly as normal
 
@@ -982,8 +988,7 @@ In `functions/cleanup.php`:
 <?php
 function cleanup_expired_tokens(): void
 {
-    global $db;
-    $db->exec('DELETE FROM _auth_tokens WHERE expires_at < ?', [date('Y-m-d H:i:s')]);
+    LF::db()->exec('DELETE FROM _auth_tokens WHERE expires_at < ?', [date('Y-m-d H:i:s')]);
 }
 ```
 
@@ -998,26 +1003,24 @@ function cleanup_expired_tokens(): void
 
 ## Database Access
 
-For cases where entity functions aren't enough, use the `$db` global directly:
+For cases where entity methods aren't enough, use `LF::db()` directly:
 
 ```php
-global $db;
-
 // Single row
-$row = $db->one('SELECT * FROM entities__article WHERE id = ?', [5]);
+$row = LF::db()->one('SELECT * FROM entities__article WHERE id = ?', [5]);
 
 // Multiple rows
-$rows = $db->all('SELECT * FROM entities__article WHERE published = ?', [1]);
+$rows = LF::db()->all('SELECT * FROM entities__article WHERE published = ?', [1]);
 
 // Write operations
-$db->exec('UPDATE entities__article SET views = views + 1 WHERE id = ?', [5]);
+LF::db()->exec('UPDATE entities__article SET views = views + 1 WHERE id = ?', [5]);
 
 // Insert and get ID
-$db->exec('INSERT INTO my_table (name) VALUES (?)', ['test']);
-$id = $db->lastId();
+LF::db()->exec('INSERT INTO my_table (name) VALUES (?)', ['test']);
+$id = LF::db()->lastId();
 
 // Transaction
-$db->transaction(function ($db) {
+LF::db()->transaction(function ($db) {
     $db->exec('INSERT INTO ...', [...]);
     $db->exec('UPDATE ...', [...]);
     // automatically commits; rolls back on exception
@@ -1090,7 +1093,7 @@ This means the framework works with **any server** (Apache, nginx, LiteSpeed, et
 
 ## Validation Error Format
 
-When `entity_save` encounters validation errors, it returns:
+When `LF::save` encounters validation errors, it returns:
 
 ```json
 {
@@ -1141,18 +1144,18 @@ For custom filtering logic beyond what `$api(list)` supports, write a handler:
 
 ```php
 return function () {
-    [$page, $perPage] = paginate_request();
-    $query = entity_query('article');
+    [$page, $perPage] = LF::paginate();
+    $query = LF::query('article');
 
-    if (input_exists('category')) {
-        $query->where('category', input('category'));
+    if (LF::input_exists('category')) {
+        $query->where('category', LF::input('category'));
     }
-    if (input_exists('published')) {
-        $query->where('published', (bool) input('published'));
+    if (LF::input_exists('published')) {
+        $query->where('published', (bool) LF::input('published'));
     }
 
     return $query
-        ->sort(input('sort', 'created_at'), input('order', 'desc'))
+        ->sort(LF::input('sort', 'created_at'), LF::input('order', 'desc'))
         ->with('author')
         ->paginate($page, $perPage);
 };
@@ -1162,17 +1165,17 @@ return function () {
 
 ```php
 return function () {
-    $article = entity_load((int) route_param('id'));
-    if (!$article) return error(404, 'Not found');
+    $article = LF::load((int) LF::route_param('id'));
+    if (!$article) return LF::error(404, 'Not found');
 
-    $user = current_user();
+    $user = LF::user();
     if ($article->author !== $user->id && $user->role !== 'admin') {
-        return error(403, 'Not your article');
+        return LF::error(403, 'Not your article');
     }
 
-    return entity_save('article', [
+    return LF::save('article', [
         'id' => $article->id,
-        'title' => input('title'),
+        'title' => LF::input('title'),
     ]);
 };
 ```
@@ -1181,12 +1184,12 @@ return function () {
 
 ```php
 return function () {
-    $ids = input('ids');  // array of IDs
-    if (!is_array($ids)) return error(400, 'ids must be an array');
+    $ids = LF::input('ids');  // array of IDs
+    if (!is_array($ids)) return LF::error(400, 'ids must be an array');
 
     $results = [];
     foreach ($ids as $id) {
-        $results[] = entity_delete((int) $id);
+        $results[] = LF::delete((int) $id);
     }
     return ['results' => $results];
 };
@@ -1196,35 +1199,35 @@ return function () {
 
 ```php
 // Track feature flags
-variable_set('maintenance_mode', true);
-if (variable_get('maintenance_mode', false)) {
-    return error(503, 'Under maintenance');
+LF::variable_set('maintenance_mode', true);
+if (LF::variable_get('maintenance_mode', false)) {
+    return LF::error(503, 'Under maintenance');
 }
 
 // Track counters
-$count = variable_get('total_signups', 0);
-variable_set('total_signups', $count + 1);
+$count = LF::variable_get('total_signups', 0);
+LF::variable_set('total_signups', $count + 1);
 ```
 
 ---
 
 ## Function Index
 
-Every user-facing function in the framework. Internal functions (`_lf_` prefix) are omitted — those are not meant to be called from handlers, hooks, or functions.
+Every user-facing method in the framework. Internal functions (`_lf_` prefix) are omitted — those are not meant to be called from handlers, hooks, or functions.
 
 ### Entity CRUD
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `entity_save(string $type, array $data)` | `object\|array` | Create or update an entity. Include `id` in data to update. Returns entity or validation error array. |
-| `entity_load(int $id, array $with = [])` | `?object` | Load entity by ID. Pass reference field names in `$with` to eager-load, or `['*']` for all. |
-| `entity_load_by(string $type, string $field, mixed $value)` | `?object` | Load entity by field value within a type. |
-| `entity_delete(int $id)` | `bool\|array` | Delete entity. Returns `true`, `false` (not found), or error array (blocked by hook). |
-| `entity_query(string $type)` | `EntityQuery` | Create a chainable query builder. |
+| `LF::save(string $type, array $data)` | `object\|array` | Create or update an entity. Include `id` in data to update. Returns entity or validation error array. |
+| `LF::load(int $id, array $with = [])` | `?object` | Load entity by ID. Pass reference field names in `$with` to eager-load, or `['*']` for all. |
+| `LF::load_by(string $type, string $field, mixed $value)` | `?object` | Load entity by field value within a type. |
+| `LF::delete(int $id)` | `bool\|array` | Delete entity. Returns `true`, `false` (not found), or error array (blocked by hook). |
+| `LF::query(string $type)` | `EntityQuery` | Create a chainable query builder. |
 
 ### Entity Query Builder
 
-Methods on the `EntityQuery` object returned by `entity_query()`. All filter/sort methods return `self` for chaining.
+Methods on the `EntityQuery` object returned by `LF::query()`. All filter/sort methods return `self` for chaining.
 
 | Method | Returns | Description |
 |--------|---------|-------------|
@@ -1243,61 +1246,61 @@ Methods on the `EntityQuery` object returned by `entity_query()`. All filter/sor
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `input(string $key, mixed $default = null)` | `mixed` | Get input value from GET, POST, or JSON body. |
-| `input_exists(string $key)` | `bool` | Check if input key exists. |
-| `input_all()` | `array` | Get all input as array. |
-| `input_file(string $key)` | `?array` | Get uploaded file info. |
-| `route_param(string $key)` | `mixed` | Get route parameter (`:id`, `:slug`, etc). |
-| `paginate_request(int $defaultPerPage = 20)` | `array` | Parse `page` and `per_page` from query params. Returns `[$page, $perPage]`. |
-| `current_user()` | `?object` | Get authenticated user for current request, or null. |
+| `LF::input(string $key, mixed $default = null)` | `mixed` | Get input value from GET, POST, or JSON body. |
+| `LF::input_exists(string $key)` | `bool` | Check if input key exists. |
+| `LF::input_all()` | `array` | Get all input as array. |
+| `LF::input_file(string $key)` | `?array` | Get uploaded file info. |
+| `LF::route_param(string $key)` | `mixed` | Get route parameter (`:id`, `:slug`, etc). |
+| `LF::paginate(int $defaultPerPage = 20)` | `array` | Parse `page` and `per_page` from query params. Returns `[$page, $perPage]`. |
+| `LF::user()` | `?object` | Get authenticated user for current request, or null. |
 
 ### Response
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `error(int $code, string $message)` | `array` | Set HTTP status code, return `['error' => $message]`. |
-| `validation_error(array $fields)` | `array` | Return 422 response with per-field errors: `{error: 'Validation failed', fields: {...}}`. |
+| `LF::error(int $code, string $message)` | `array` | Set HTTP status code, return `['error' => $message]`. |
+| `LF::validation_error(array $fields)` | `array` | Return 422 response with per-field errors: `{error: 'Validation failed', fields: {...}}`. |
 
 ### Settings & Roles
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `setting(string $key, mixed $default = null)` | `mixed` | Read from `settings.yml`. Dot notation for nested: `setting('cors.origin')`. |
-| `role_default()` | `string` | Get `default_role` from `config/roles.yml`. Falls back to `'user'`. |
+| `LF::setting(string $key, mixed $default = null)` | `mixed` | Read from `settings.yml`. Dot notation for nested: `LF::setting('cors.origin')`. |
+| `LF::role_default()` | `string` | Get `default_role` from `config/roles.yml`. Falls back to `'user'`. |
 
 ### Variables (Key-Value Store)
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `variable_get(string $name, mixed $default = null)` | `mixed` | Get a persistent variable. Values are JSON-decoded. |
-| `variable_set(string $name, mixed $value)` | `void` | Set a persistent variable. Values are JSON-encoded. |
-| `variable_del(string $name)` | `void` | Delete a persistent variable. |
+| `LF::variable_get(string $name, mixed $default = null)` | `mixed` | Get a persistent variable. Values are JSON-decoded. |
+| `LF::variable_set(string $name, mixed $value)` | `void` | Set a persistent variable. Values are JSON-encoded. |
+| `LF::variable_del(string $name)` | `void` | Delete a persistent variable. |
 
 ### Hooks
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `hook_fire(string $type, string $event, mixed ...$args)` | `mixed` | Fire a lifecycle hook. Returns modified data or hook result. |
-| `hook_exists(string $type, string $event)` | `bool` | Check if a hook is registered. |
+| `LF::hook_fire(string $type, string $event, mixed ...$args)` | `mixed` | Fire a lifecycle hook. Returns modified data or hook result. |
+| `LF::hook_exists(string $type, string $event)` | `bool` | Check if a hook is registered. |
 
 ### Files
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `file_store(array $file, string $storage, string $entityType = null, int $entityId = null, string $field = null)` | `int` | Store an uploaded file. `$storage` is `'public'` or `'protected'`. Returns file ID. |
-| `file_delete(int $fileId)` | `void` | Delete a file by ID (removes from disk and `_files` table). |
-| `file_resolve(int $fileId)` | `?object` | Resolve file ID to object with `id`, `filename`, `url`, `mime_type`, `size`. |
+| `LF::file_store(array $file, string $storage, string $entityType = null, int $entityId = null, string $field = null)` | `int` | Store an uploaded file. `$storage` is `'public'` or `'protected'`. Returns file ID. |
+| `LF::file_delete(int $fileId)` | `void` | Delete a file by ID (removes from disk and `_files` table). |
+| `LF::file_resolve(int $fileId)` | `?object` | Resolve file ID to object with `id`, `filename`, `url`, `mime_type`, `size`. |
 
-### Database (via `$db` global)
+### Database (via `LF::db()`)
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `$db->one(string $sql, array $params = [])` | `?object` | Query single row. |
-| `$db->all(string $sql, array $params = [])` | `array` | Query multiple rows. |
-| `$db->exec(string $sql, array $params = [])` | `int` | Execute write operation. Returns affected row count. |
-| `$db->lastId()` | `int` | Last inserted row ID. |
-| `$db->transaction(callable $fn)` | `mixed` | Run callback in transaction. Auto-commits; rolls back on exception. |
-| `$db->pdo()` | `PDO` | Get underlying PDO instance. |
+| `LF::db()->one(string $sql, array $params = [])` | `?object` | Query single row. |
+| `LF::db()->all(string $sql, array $params = [])` | `array` | Query multiple rows. |
+| `LF::db()->exec(string $sql, array $params = [])` | `int` | Execute write operation. Returns affected row count. |
+| `LF::db()->lastId()` | `int` | Last inserted row ID. |
+| `LF::db()->transaction(callable $fn)` | `mixed` | Run callback in transaction. Auto-commits; rolls back on exception. |
+| `LF::db()->pdo()` | `PDO` | Get underlying PDO instance. |
 
 ### Auth (internal, but useful for custom registration handlers)
 

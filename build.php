@@ -15,12 +15,9 @@ function liteframe_build(string $projectDir, string $distDir): string
     $output[] = '// Generated: ' . date('Y-m-d H:i:s');
     $output[] = '';
 
-    // --- Inline all src/ files ---
-    // Order matters: Database first, then EntityQuery, then functions, then Router/Request
-    // schema.php included for runtime _lf_schema_sync()
-    $srcOrder = ['Database.php', 'EntityQuery.php', 'Request.php', 'Router.php', 'hooks.php', 'derived.php', 'settings.php', 'auth.php', 'validation.php', 'variables.php', 'cron.php', 'functions.php', 'schema.php', 'files.php', 'cors.php', 'rate_limit.php', 'api.php'];
-    $output[] = '// === FRAMEWORK ===';
-    foreach ($srcOrder as $filename) {
+    // --- Inline Database, Request, Router classes ---
+    $output[] = '// === FRAMEWORK CLASSES ===';
+    foreach (['Database.php', 'Request.php', 'Router.php'] as $filename) {
         $file = $projectDir . '/src/' . $filename;
         if (file_exists($file)) {
             $source = file_get_contents($file);
@@ -28,6 +25,56 @@ function liteframe_build(string $projectDir, string $distDir): string
             $output[] = '// --- ' . $filename . ' ---';
             $output[] = $source;
         }
+    }
+
+    // --- Build the LF class with inlined traits ---
+    $output[] = '// === LF CLASS (traits inlined) ===';
+
+    // Collect all trait method bodies
+    $traitBodies = [];
+    $traitFiles = glob($projectDir . '/src/traits/LF*.php');
+    foreach ($traitFiles as $file) {
+        $source = file_get_contents($file);
+        // Strip <?php tag
+        $source = preg_replace('/^<\?php\s*/', '', $source);
+        // Extract content between trait Name { ... } — everything inside the braces
+        if (preg_match('/^trait\s+\w+\s*\{(.+)\}\s*$/s', trim($source), $m)) {
+            $traitBodies[] = $m[1];
+        }
+    }
+
+    $output[] = 'class LF {';
+    $output[] = '    protected static ?Database $db = null;';
+    $output[] = '    protected static array $types = [];';
+    $output[] = '    protected static array $hooks = [];';
+    $output[] = '    protected static array $derived = [];';
+    $output[] = '    protected static array $effects = [];';
+    $output[] = '    protected static array $settings = [];';
+    $output[] = '    protected static array $roles = [];';
+    $output[] = '    protected static ?Request $request = null;';
+    $output[] = '    protected static ?array $matched_route = null;';
+    $output[] = '    protected static ?object $current_user = null;';
+    $output[] = '    protected static array $crons = [];';
+    $output[] = '    protected static array $api_directives = [];';
+    $output[] = '';
+    $output[] = '    public static function db(): Database { return self::$db; }';
+    $output[] = '    public static function types(): array { return self::$types; }';
+    $output[] = '';
+
+    foreach ($traitBodies as $body) {
+        $output[] = $body;
+    }
+
+    $output[] = '}';
+    $output[] = '';
+
+    // --- Inline EntityQuery ---
+    $eqFile = $projectDir . '/src/EntityQuery.php';
+    if (file_exists($eqFile)) {
+        $source = file_get_contents($eqFile);
+        $source = preg_replace('/^<\?php\s*/', '', $source);
+        $output[] = '// --- EntityQuery.php ---';
+        $output[] = $source;
     }
 
     // --- Parse and compile routes.yml ---
@@ -51,40 +98,61 @@ function liteframe_build(string $projectDir, string $distDir): string
         }
     }
     $output[] = '// === COMPILED ROUTES ===';
-    $output[] = '$ROUTES = ' . var_export($routes, true) . ';';
+    $output[] = '$_ROUTES = ' . var_export($routes, true) . ';';
     $output[] = '';
 
     // --- Inline handler files ---
     $output[] = '// === COMPILED HANDLERS ===';
-    $output[] = '$HANDLERS = [];';
+    $output[] = '$_HANDLERS = [];';
     $handlersDir = $projectDir . '/handlers';
     if (is_dir($handlersDir)) {
         foreach (glob($handlersDir . '/*.php') as $file) {
             $name = basename($file, '.php');
             $source = file_get_contents($file);
             $source = preg_replace('/^<\?php\s*/', '', $source);
-            $source = preg_replace('/^return\s+/m', '$HANDLERS[\'' . $name . '\'] = ', $source, 1);
+            $source = preg_replace('/^return\s+/m', '$_HANDLERS[\'' . $name . '\'] = ', $source, 1);
             $output[] = $source;
         }
     }
     $output[] = '';
 
-    // --- Parse types.yml and generate schema at build time ---
-    require_once $projectDir . '/src/schema.php';
-    $typesFile = $projectDir . '/config/types.yml';
-    $types = file_exists($typesFile) ? _lf_parse_types($typesFile) : [];
+    // --- Parse types.yml at build time ---
+    // We need to load LF to use parse_types
+    require_once $projectDir . '/src/Database.php';
+    require_once $projectDir . '/src/Request.php';
+    require_once $projectDir . '/src/Router.php';
+    if (!class_exists('LF')) {
+        require_once $projectDir . '/src/LF.php';
+    }
 
-    // Compile types config into output
+    $typesFile = $projectDir . '/config/types.yml';
+    // Initialize LF with a temp in-memory DB just for parsing
+    LF::init(['db' => new Database(':memory:')]);
+    $types = file_exists($typesFile) ? LF::types() : [];
+    // Actually parse the types file (parse_types is protected, but we need it)
+    // Use reflection to call protected method
+    if (file_exists($typesFile)) {
+        $ref = new ReflectionMethod('LF', 'parse_types');
+        $ref->setAccessible(true);
+        $types = $ref->invoke(null, $typesFile);
+    }
+
     $output[] = '// === COMPILED TYPES ===';
-    $output[] = '$TYPES = ' . var_export($types, true) . ';';
+    $output[] = '$_TYPES = ' . var_export($types, true) . ';';
     $output[] = '';
 
-    // Compile derived, effects, and API directives config (set by _lf_parse_types)
-    global $DERIVED, $EFFECTS, $API_DIRECTIVES;
+    // Get derived, effects, and API directives (set by parse_types on LF static props)
+    $refDerived = new ReflectionProperty('LF', 'derived');
+    $refDerived->setAccessible(true);
+    $refEffects = new ReflectionProperty('LF', 'effects');
+    $refEffects->setAccessible(true);
+    $refApiDir = new ReflectionProperty('LF', 'api_directives');
+    $refApiDir->setAccessible(true);
+
     $output[] = '// === COMPILED DERIVED & EFFECTS ===';
-    $output[] = '$DERIVED = ' . var_export($DERIVED ?? [], true) . ';';
-    $output[] = '$EFFECTS = ' . var_export($EFFECTS ?? [], true) . ';';
-    $output[] = '$API_DIRECTIVES = ' . var_export($API_DIRECTIVES ?? [], true) . ';';
+    $output[] = '$_DERIVED = ' . var_export($refDerived->getValue(), true) . ';';
+    $output[] = '$_EFFECTS = ' . var_export($refEffects->getValue(), true) . ';';
+    $output[] = '$_API_DIRECTIVES = ' . var_export($refApiDir->getValue(), true) . ';';
     $output[] = '';
 
     // --- Parse and compile cron.yml ---
@@ -108,7 +176,7 @@ function liteframe_build(string $projectDir, string $distDir): string
         }
     }
     $output[] = '// === COMPILED CRONS ===';
-    $output[] = '$CRONS = ' . var_export($crons, true) . ';';
+    $output[] = '$_CRONS = ' . var_export($crons, true) . ';';
     $output[] = '';
 
     // --- Inline user function files ---
@@ -127,13 +195,14 @@ function liteframe_build(string $projectDir, string $distDir): string
 
     // --- Inline hook files ---
     $output[] = '// === COMPILED HOOKS ===';
+    $output[] = '$_HOOKS = [];';
     $hooksDir = $projectDir . '/hooks';
     if (is_dir($hooksDir)) {
         foreach (glob($hooksDir . '/*.php') as $file) {
             $type = basename($file, '.php');
             $source = file_get_contents($file);
             $source = preg_replace('/^<\?php\s*/', '', $source);
-            $source = preg_replace('/^return\s+/m', '$_hooks[\'' . $type . '\'] = ', $source, 1);
+            $source = preg_replace('/^return\s+/m', '$_HOOKS[\'' . $type . '\'] = ', $source, 1);
             $output[] = $source;
         }
     }
@@ -206,16 +275,29 @@ function liteframe_build(string $projectDir, string $distDir): string
     $output[] = '    file_put_contents($_dataDir . "/.htaccess", "Deny from all\n");';
     $output[] = '    $_dbDir = $_dataDir;';
     $output[] = '}';
-    $output[] = '$db = new Database($_dbDir . "/data.db");';
+    $output[] = '';
+    $output[] = '// Initialize LF with compiled config';
+    $output[] = 'LF::init([';
+    $output[] = '    "db" => new Database($_dbDir . "/data.db"),';
+    $output[] = '    "request" => new Request(),';
+    $output[] = '    "types" => $_TYPES,';
+    $output[] = '    "derived" => $_DERIVED,';
+    $output[] = '    "effects" => $_EFFECTS,';
+    $output[] = '    "api_directives" => $_API_DIRECTIVES,';
+    $output[] = '    "crons" => $_CRONS,';
+    $output[] = '    "hooks" => $_HOOKS,';
+    $output[] = '    "settings" => $_settings ?? [],';
+    $output[] = '    "roles" => $_roles ?? [],';
+    $output[] = ']);';
     $output[] = 'define("LITEFRAME_DB_DIR", $_dbDir);';
-    $output[] = '$request = new Request();';
     $output[] = '';
     $output[] = '// Schema — sync from types config';
-    $output[] = '_lf_schema_sync($db, $TYPES);';
+    $output[] = '$_schemaRef = new ReflectionMethod("LF", "schema_sync");';
+    $output[] = '$_schemaRef->setAccessible(true);';
+    $output[] = '$_schemaRef->invoke(null, LF::db(), $_TYPES);';
     $output[] = '';
 
-    // --- Auto-setup: create .htaccess and robots.txt on first run ---
-    // Placed after bootstrap so data.db and schema are created before redirect
+    // --- Auto-setup ---
     $output[] = '// === AUTO-SETUP ===';
     $output[] = 'if (!file_exists(__DIR__ . "/.htaccess")) {';
     $output[] = '    $written = file_put_contents(__DIR__ . "/.htaccess", <<<\'HTACCESS\'';
@@ -252,9 +334,9 @@ function liteframe_build(string $projectDir, string $distDir): string
     $output[] = '}';
     $output[] = '';
 
-    // --- Database security self-check (runs once) ---
+    // --- Database security self-check ---
     $output[] = '// === DB SECURITY CHECK ===';
-    $output[] = 'if (!variable_get("_db_security_checked", false) && LITEFRAME_DB_DIR === __DIR__ . "/.data") {';
+    $output[] = 'if (!LF::variable_get("_db_security_checked", false) && LITEFRAME_DB_DIR === __DIR__ . "/.data") {';
     $output[] = '    $_scheme = (!empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off") ? "https" : "http";';
     $output[] = '    $_base = rtrim(dirname($_SERVER["SCRIPT_NAME"]), "/\\\\");';
     $output[] = '    $_checkUrl = $_scheme . "://" . $_SERVER["HTTP_HOST"] . $_base . "/.data/data.db";';
@@ -277,42 +359,85 @@ function liteframe_build(string $projectDir, string $distDir): string
     $output[] = '        echo "</body></html>";';
     $output[] = '        return;';
     $output[] = '    }';
-    $output[] = '    variable_set("_db_security_checked", true);';
+    $output[] = '    LF::variable_set("_db_security_checked", true);';
     $output[] = '}';
     $output[] = '';
 
     // --- Settings ---
-    require_once $projectDir . '/src/settings.php';
+    // Load settings at build time to compile them
     $settingsFile = $projectDir . '/settings.yml';
+    $compiledSettings = [];
     if (file_exists($settingsFile)) {
-        _lf_settings_load($settingsFile);
+        // Parse settings manually (same logic as LFSettings trait)
+        $currentSection = null;
+        foreach (file($settingsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+            if (str_starts_with(trim($line), '#')) continue;
+            $line = preg_replace('/\s+#.*$/', '', $line);
+            if ($currentSection && preg_match('/^\s+/', $line)) {
+                $trimmed = trim($line);
+                if (!str_contains($trimmed, ':')) continue;
+                [$key, $value] = explode(':', $trimmed, 2);
+                $compiledSettings[$currentSection][trim($key)] = _lf_build_cast_setting(trim($value));
+                continue;
+            }
+            $trimmed = trim($line);
+            if (!str_contains($trimmed, ':')) continue;
+            [$key, $value] = explode(':', $trimmed, 2);
+            $key = trim($key);
+            $value = trim($value);
+            if ($value === '') {
+                $currentSection = $key;
+                if (!isset($compiledSettings[$currentSection])) {
+                    $compiledSettings[$currentSection] = [];
+                }
+                continue;
+            }
+            $currentSection = null;
+            $compiledSettings[$key] = _lf_build_cast_setting($value);
+        }
     }
     $output[] = '// === COMPILED SETTINGS ===';
-    $output[] = '$_settings = ' . var_export($GLOBALS['_settings'], true) . ';';
+    $output[] = '$_settings = ' . var_export($compiledSettings, true) . ';';
+    $output[] = 'LF::init(["settings" => $_settings]);';
     $output[] = '';
 
     // --- Roles ---
     $rolesFile = $projectDir . '/config/roles.yml';
+    $compiledRoles = [];
     if (file_exists($rolesFile)) {
-        _lf_roles_load($rolesFile);
+        foreach (file($rolesFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+            if (str_starts_with(trim($line), '#')) continue;
+            $line = preg_replace('/\s+#.*$/', '', $line);
+            $trimmed = trim($line);
+            if (!str_contains($trimmed, ':')) continue;
+            [$key, $value] = explode(':', $trimmed, 2);
+            $compiledRoles[trim($key)] = trim($value);
+        }
     }
     $output[] = '// === COMPILED ROLES ===';
-    $output[] = '$_roles = ' . var_export($GLOBALS['_roles'], true) . ';';
+    $output[] = '$_roles = ' . var_export($compiledRoles, true) . ';';
+    $output[] = 'LF::init(["roles" => $_roles]);';
     $output[] = '';
 
-    // CORS (before cron, matching dev mode order)
+    // CORS
     $output[] = '// CORS';
-    $output[] = 'if (_lf_cors_headers()) return;';
+    $output[] = '$_corsRef = new ReflectionMethod("LF", "cors_headers");';
+    $output[] = '$_corsRef->setAccessible(true);';
+    $output[] = 'if ($_corsRef->invoke(null)) return;';
     $output[] = '';
 
-    // Cron — check and run due tasks
+    // Cron
     $output[] = '// Cron';
-    $output[] = '_lf_cron_run();';
+    $output[] = '$_cronRef = new ReflectionMethod("LF", "cron_run");';
+    $output[] = '$_cronRef->setAccessible(true);';
+    $output[] = '$_cronRef->invoke(null);';
     $output[] = '';
 
     // --- Dispatch ---
     $output[] = '// === DISPATCH ===';
-    $output[] = '$uri = $request->uri;';
+    $output[] = '$uri = LF::db() ? true : true; // ensure init';
+    $output[] = '$_req = new Request();';
+    $output[] = '$uri = $_req->uri;';
     $output[] = '$scriptDir = dirname($_SERVER["SCRIPT_NAME"]);';
     $output[] = 'if ($scriptDir !== "/" && $scriptDir !== "\\\\") {';
     $output[] = '    $uri = substr($uri, strlen($scriptDir)) ?: "/";';
@@ -321,34 +446,36 @@ function liteframe_build(string $projectDir, string $distDir): string
 
     // Add built-in auth routes
     $output[] = '// Built-in auth routes';
-    $output[] = '$ROUTES["auth_login"] = ["path" => "/api/auth/login", "handler" => "_auth_login", "method" => "POST", "auth" => "public"];';
-    $output[] = '$ROUTES["auth_refresh"] = ["path" => "/api/auth/refresh", "handler" => "_auth_refresh", "method" => "POST", "auth" => "public"];';
-    $output[] = '$ROUTES["auth_logout"] = ["path" => "/api/auth/logout", "handler" => "_auth_logout", "method" => "POST", "auth" => "public"];';
-    $output[] = '$ROUTES["_lf_file_serve"] = ["path" => "/api/files/:id", "handler" => "_lf_file_serve", "method" => "GET", "auth" => "public"];';
-    $output[] = '$ROUTES["_lf_cron_run"] = ["path" => "/api/cron", "handler" => "_lf_cron_run", "method" => "GET", "auth" => "public"];';
+    $output[] = '$_ROUTES["auth_login"] = ["path" => "/api/auth/login", "handler" => "_auth_login", "method" => "POST", "auth" => "public"];';
+    $output[] = '$_ROUTES["auth_refresh"] = ["path" => "/api/auth/refresh", "handler" => "_auth_refresh", "method" => "POST", "auth" => "public"];';
+    $output[] = '$_ROUTES["auth_logout"] = ["path" => "/api/auth/logout", "handler" => "_auth_logout", "method" => "POST", "auth" => "public"];';
+    $output[] = '$_ROUTES["_lf_file_serve"] = ["path" => "/api/files/:id", "handler" => "_lf_file_serve", "method" => "GET", "auth" => "public"];';
+    $output[] = '$_ROUTES["_lf_cron_run"] = ["path" => "/api/cron", "handler" => "_lf_cron_run", "method" => "GET", "auth" => "public"];';
     $output[] = '';
 
     // Auto-generated $api() routes
     $output[] = '// Auto-generated $api() routes';
-    $output[] = '$_apiRoutes = _lf_api_routes_from_types();';
+    $output[] = '$_apiRef = new ReflectionMethod("LF", "api_routes_from_types");';
+    $output[] = '$_apiRef->setAccessible(true);';
+    $output[] = '$_apiRoutes = $_apiRef->invoke(null);';
     $output[] = '';
 
     $output[] = '$router = new Router();';
-    $output[] = '// routes.yml + built-in first (takes priority over auto-generated)';
-    $output[] = 'foreach ($ROUTES as $name => $route) {';
+    $output[] = 'foreach ($_ROUTES as $name => $route) {';
     $output[] = '    $router->addRoute($name, $route);';
     $output[] = '}';
-    $output[] = '// Auto-generated $api() routes (only matched if no routes.yml route matched first)';
     $output[] = 'foreach ($_apiRoutes as $name => $route) {';
     $output[] = '    $router->addRoute($name, $route);';
     $output[] = '}';
     $output[] = '';
-    $output[] = '$matched_route = $router->match($uri, $request->method);';
+    $output[] = '$_matchRef = new ReflectionProperty("LF", "matched_route");';
+    $output[] = '$_matchRef->setAccessible(true);';
+    $output[] = '$_matchRef->setValue(null, $router->match($uri, $_req->method));';
+    $output[] = '$matched_route = $_matchRef->getValue();';
     $output[] = '';
     $output[] = 'header("Content-Type: application/json");';
     $output[] = '';
     $output[] = 'if (!$matched_route) {';
-    $output[] = '    // Not an API route — serve the SPA';
     $output[] = '    $spaFile = __DIR__ . "/index.html";';
     $output[] = '    if (file_exists($spaFile)) {';
     $output[] = '        header("Content-Type: text/html");';
@@ -369,51 +496,64 @@ function liteframe_build(string $projectDir, string $distDir): string
 
     // Rate limiting
     $output[] = '// Rate limiting';
-    $output[] = 'if (!_lf_rate_limit_check($matched_route["handler"])) {';
-    $output[] = '    echo json_encode(error(429, "Too many requests"));';
+    $output[] = '$_rlRef = new ReflectionMethod("LF", "rate_limit_check");';
+    $output[] = '$_rlRef->setAccessible(true);';
+    $output[] = 'if (!$_rlRef->invoke(null, $matched_route["handler"])) {';
+    $output[] = '    echo json_encode(LF::error(429, "Too many requests"));';
     $output[] = '    return;';
     $output[] = '}';
     $output[] = '';
 
     // Auth middleware
     $output[] = '// Authenticate request';
-    $output[] = '_lf_auth_authenticate_request();';
-    $output[] = '$authError = _lf_auth_check_route($matched_route);';
+    $output[] = '$_authReqRef = new ReflectionMethod("LF", "auth_authenticate_request");';
+    $output[] = '$_authReqRef->setAccessible(true);';
+    $output[] = '$_authReqRef->invoke(null);';
+    $output[] = '$_authCheckRef = new ReflectionMethod("LF", "auth_check_route");';
+    $output[] = '$_authCheckRef->setAccessible(true);';
+    $output[] = '$authError = $_authCheckRef->invoke(null, $matched_route);';
     $output[] = 'if ($authError) {';
     $output[] = '    echo json_encode($authError);';
     $output[] = '    return;';
     $output[] = '}';
     $output[] = '';
 
-    // Dispatch handler (all wrapped in exception handler)
+    // Dispatch handler
     $output[] = '$handler_name = $matched_route["handler"];';
     $output[] = 'try {';
     $output[] = '';
 
     // Built-in file handler
-    $output[] = '// Built-in file handler';
     $output[] = 'if ($handler_name === "_lf_file_serve") {';
-    $output[] = '    _lf_file_serve((int) route_param("id"));';
+    $output[] = '    $_fsRef = new ReflectionMethod("LF", "file_serve");';
+    $output[] = '    $_fsRef->setAccessible(true);';
+    $output[] = '    $_fsRef->invoke(null, (int) LF::route_param("id"));';
     $output[] = '    return;';
     $output[] = '}';
     $output[] = '';
 
     // Built-in cron handler
-    $output[] = '// Built-in cron handler';
     $output[] = 'if ($handler_name === "_lf_cron_run") {';
-    $output[] = '    echo json_encode(_lf_cron_handle_run());';
+    $output[] = '    $_chRef = new ReflectionMethod("LF", "cron_handle_run");';
+    $output[] = '    $_chRef->setAccessible(true);';
+    $output[] = '    echo json_encode($_chRef->invoke(null));';
     $output[] = '    return;';
     $output[] = '}';
     $output[] = '';
 
     // Built-in auth handlers
-    $output[] = '// Built-in auth handlers';
     $output[] = 'if (str_starts_with($handler_name, "_auth_")) {';
+    $output[] = '    $_ahLoginRef = new ReflectionMethod("LF", "auth_handle_login");';
+    $output[] = '    $_ahLoginRef->setAccessible(true);';
+    $output[] = '    $_ahRefreshRef = new ReflectionMethod("LF", "auth_handle_refresh");';
+    $output[] = '    $_ahRefreshRef->setAccessible(true);';
+    $output[] = '    $_ahLogoutRef = new ReflectionMethod("LF", "auth_handle_logout");';
+    $output[] = '    $_ahLogoutRef->setAccessible(true);';
     $output[] = '    $result = match ($handler_name) {';
-    $output[] = '        "_auth_login" => _lf_auth_handle_login(),';
-    $output[] = '        "_auth_refresh" => _lf_auth_handle_refresh(),';
-    $output[] = '        "_auth_logout" => _lf_auth_handle_logout(),';
-    $output[] = '        default => error(404, "Unknown auth handler"),';
+    $output[] = '        "_auth_login" => $_ahLoginRef->invoke(null),';
+    $output[] = '        "_auth_refresh" => $_ahRefreshRef->invoke(null),';
+    $output[] = '        "_auth_logout" => $_ahLogoutRef->invoke(null),';
+    $output[] = '        default => LF::error(404, "Unknown auth handler"),';
     $output[] = '    };';
     $output[] = '    echo json_encode($result);';
     $output[] = '    return;';
@@ -421,16 +561,17 @@ function liteframe_build(string $projectDir, string $distDir): string
     $output[] = '';
 
     // Auto-generated $api() type handler
-    $output[] = '// Auto-generated $api() type handler';
     $output[] = 'if (isset($matched_route["_type"])) {';
-    $output[] = '    echo json_encode(_lf_type_dispatch($matched_route));';
+    $output[] = '    $_tdRef = new ReflectionMethod("LF", "type_dispatch");';
+    $output[] = '    $_tdRef->setAccessible(true);';
+    $output[] = '    echo json_encode($_tdRef->invoke(null, $matched_route));';
     $output[] = '    return;';
     $output[] = '}';
     $output[] = '';
 
     // User-defined handlers
-    $output[] = 'if (isset($HANDLERS[$handler_name])) {';
-    $output[] = '    echo json_encode($HANDLERS[$handler_name]());';
+    $output[] = 'if (isset($_HANDLERS[$handler_name])) {';
+    $output[] = '    echo json_encode($_HANDLERS[$handler_name]());';
     $output[] = '} else {';
     $output[] = '    http_response_code(500);';
     $output[] = '    echo json_encode(["error" => "Handler not found: " . $handler_name]);';
@@ -469,6 +610,19 @@ function liteframe_build(string $projectDir, string $distDir): string
     if (!is_dir($distDir . '/files/protected')) mkdir($distDir . '/files/protected', 0755, true);
 
     return $distFile;
+}
+
+// Helper for build-time settings parsing
+function _lf_build_cast_setting(string $value): mixed
+{
+    if ($value === 'true') return true;
+    if ($value === 'false') return false;
+    if (is_numeric($value)) return $value + 0;
+    if ((str_starts_with($value, '"') && str_ends_with($value, '"'))
+        || (str_starts_with($value, "'") && str_ends_with($value, "'"))) {
+        return substr($value, 1, -1);
+    }
+    return $value;
 }
 
 // Recursively copy a directory

@@ -5,7 +5,7 @@
  *
  * This is the one class developers interact with, because chaining
  * requires an object. But they never instantiate it directly —
- * they call entity_query('type').
+ * they call LF::query('type').
  */
 class EntityQuery
 {
@@ -30,9 +30,8 @@ class EntityQuery
 
     public function where(string $field, mixed $operatorOrValue = null, mixed $value = null): self
     {
-        _lf_validate_identifier($field);
+        LF::validate_identifier($field);
         if (func_num_args() === 2) {
-            // Two-arg: where('published', true) or where('field', null)
             if ($operatorOrValue === null) {
                 $this->wheres[] = "{$field} IS NULL";
             } else {
@@ -40,7 +39,6 @@ class EntityQuery
                 $this->params[] = $operatorOrValue;
             }
         } else {
-            // Three-arg: where('price', '>', 100) or where('field', 'IS', null)
             $op = strtoupper(trim($operatorOrValue));
             if (!in_array($op, self::ALLOWED_OPERATORS, true)) {
                 throw new \InvalidArgumentException("Invalid operator: {$operatorOrValue}");
@@ -64,7 +62,7 @@ class EntityQuery
 
     public function sort(string $field, string $direction = 'asc'): self
     {
-        _lf_validate_identifier($field);
+        LF::validate_identifier($field);
         $direction = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
         $this->orderBy = "{$field} {$direction}";
         return $this;
@@ -84,7 +82,7 @@ class EntityQuery
 
     /**
      * Eager-load references. Pass field names, or '*' for all.
-     * entity_query('article')->with('author', 'tags')->get()
+     * LF::query('article')->with('author', 'tags')->get()
      */
     public function with(string ...$fields): self
     {
@@ -109,11 +107,7 @@ class EntityQuery
         if ($entity) {
             $entity->_type = $this->entityType;
             if ($this->entityType === 'user') unset($entity->password);
-            if (hook_exists($this->entityType, 'on_load')) {
-                $entity = hook_fire($this->entityType, 'on_load', $entity);
-            }
-            $entity = _lf_apply_derived($this->entityType, $entity);
-            $entity = _lf_file_resolve_entity($this->entityType, $entity);
+            $entity = LF::resolve_entity($this->entityType, $entity);
             if ($this->withRefs) {
                 $entity = $this->resolveRefs($entity);
             }
@@ -132,7 +126,7 @@ class EntityQuery
 
     /**
      * Paginated results with meta info.
-     * entity_query('article')->where('published', true)->paginate(1, 20)
+     * LF::query('article')->where('published', true)->paginate(1, 20)
      */
     public function paginate(int $page = 1, int $perPage = 20): array
     {
@@ -159,35 +153,28 @@ class EntityQuery
 
     private function applyHooks(array $results): array
     {
-        $hasHook = hook_exists($this->entityType, 'on_load');
         $isUser = $this->entityType === 'user';
         foreach ($results as &$entity) {
             $entity->_type = $this->entityType;
             if ($isUser) unset($entity->password);
-            if ($hasHook) {
-                $entity = hook_fire($this->entityType, 'on_load', $entity);
-            }
-            $entity = _lf_apply_derived($this->entityType, $entity);
-            $entity = _lf_file_resolve_entity($this->entityType, $entity);
+            $entity = LF::resolve_entity($this->entityType, $entity);
         }
         return $results;
     }
 
     private function resolveRefs(object $entity): object
     {
-        global $TYPES;
-        $typeFields = $TYPES[$this->entityType] ?? [];
+        $types = LF::types();
+        $typeFields = $types[$this->entityType] ?? [];
         $loadAll = in_array('*', $this->withRefs);
 
         foreach ($typeFields as $fieldName => $field) {
             if (!$loadAll && !in_array($fieldName, $this->withRefs)) continue;
 
             if ($field['type'] === 'reference' && isset($entity->$fieldName)) {
-                // Single reference — replace ID with loaded entity
-                $ref = entity_load((int) $entity->$fieldName);
+                $ref = LF::load((int) $entity->$fieldName);
                 $entity->$fieldName = $ref;
             } elseif ($field['reference_many']) {
-                // Many-to-many — query junction table
                 $junctionTable = "entities__{$this->entityType}__{$fieldName}";
                 $refType = $field['reference'];
                 $rows = $this->db->all(
@@ -197,7 +184,7 @@ class EntityQuery
                 $refs = [];
                 foreach ($rows as $row) {
                     $refIdField = $refType . '_id';
-                    $ref = entity_load((int) $row->$refIdField);
+                    $ref = LF::load((int) $row->$refIdField);
                     if ($ref) $refs[] = $ref;
                 }
                 $entity->$fieldName = $refs;
@@ -209,7 +196,7 @@ class EntityQuery
 
     private function buildSql(): string
     {
-        $cols = _lf_entity_columns($this->entityType);
+        $cols = LF::entity_columns($this->entityType);
         $sql = "SELECT {$cols} FROM {$this->table}";
 
         if ($this->wheres) {
