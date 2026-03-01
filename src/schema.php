@@ -95,6 +95,8 @@ function _lf_parse_types(string $file): array
 
     foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
         if (str_starts_with(trim($line), '#')) continue;
+        // Strip inline comments
+        $line = preg_replace('/\s+#.*$/', '', $line);
 
         if ($line[0] !== ' ' && str_ends_with(trim($line), ':')) {
             $currentType = rtrim(trim($line), ':');

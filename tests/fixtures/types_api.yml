@@ -4,6 +4,9 @@ user:
   name*: string
   email*: email
   role: string, default=user
+  $api(create): public
+  $api(update): auth
+  $api(delete): auth
 
 article:
   title*: string

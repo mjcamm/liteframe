@@ -93,6 +93,7 @@ if (file_exists($cronFile)) {
     $current = null;
     foreach (file($cronFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
         if ($line[0] === '#') continue;
+        $line = preg_replace('/\s+#.*$/', '', $line);
         if ($line[0] !== ' ' && str_ends_with(trim($line), ':')) {
             $current = rtrim(trim($line), ':');
             $CRONS[$current] = [];
@@ -114,6 +115,7 @@ if (file_exists($routesFile)) {
     $current = null;
     foreach (file($routesFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
         if (str_starts_with(trim($line), '#')) continue;
+        $line = preg_replace('/\s+#.*$/', '', $line);
         if ($line[0] !== ' ' && str_ends_with(trim($line), ':')) {
             $current = rtrim(trim($line), ':');
             $routes[$current] = [];

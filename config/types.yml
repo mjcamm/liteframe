@@ -8,4 +8,7 @@
 
 user:
   email*: email
-  role: string, default=admin
+  role: string
+  $api(create): public     #Can only ever create the default role through this endpoint, duplicate email check handled,
+  $api(update): auth       #Limited to only allowing a user to update their own user entity, and like the create role is always striped so users can not elevate themselves.
+  #Delete is not allowed via $api(delete) you must create a custom route and handler

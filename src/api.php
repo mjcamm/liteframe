@@ -26,6 +26,8 @@ function _lf_api_routes_from_types(): array
     foreach ($API_DIRECTIVES as $type => $actions) {
         foreach ($actions as $action => $permission) {
             if (!isset($actionMap[$action])) continue;
+            // User delete not allowed via $api() — use custom handler
+            if ($type === 'user' && $action === 'delete') continue;
             $map = $actionMap[$action];
 
             $route = [
@@ -168,13 +170,73 @@ function _lf_type_handle_get(string $type): array|object
 
 function _lf_type_handle_create(string $type): array|object
 {
-    return entity_save($type, input_all());
+    $data = input_all();
+
+    if ($type === 'user') {
+        global $matched_route;
+        $routeAuth = $matched_route['auth'] ?? '';
+
+        // Require password (avoid raw SQLite NOT NULL error)
+        if (empty($data['password'])) {
+            return error(422, 'Password is required');
+        }
+
+        // Check duplicate email
+        $email = $data['email'] ?? null;
+        if ($email && entity_load_by('user', 'email', $email)) {
+            return error(409, 'Email already registered');
+        }
+
+        // Always strip role — use custom handler for role elevation
+        unset($data['role']);
+
+        $user = entity_save('user', $data);
+
+        // Validation failure
+        if (is_array($user) && isset($user['error'])) {
+            return $user;
+        }
+
+        // Public registration: return user + tokens (same format as login)
+        if ($routeAuth === 'public') {
+            return [
+                'user' => $user,
+                'token' => _lf_auth_token($user),
+                'refresh_token' => _lf_auth_refresh_token($user),
+            ];
+        }
+
+        return $user;
+    }
+
+    return entity_save($type, $data);
 }
 
 function _lf_type_handle_update(string $type): array|object
 {
     $id = (int) route_param('id');
-    return entity_save($type, ['id' => $id] + input_all());
+    $data = input_all();
+
+    if ($type === 'user') {
+        // Can only edit own user
+        $caller = current_user();
+        if (!$caller || $caller->id !== $id) {
+            return error(403, 'You can only update your own account');
+        }
+
+        // Check duplicate email if email is being changed
+        if (isset($data['email'])) {
+            $existing = entity_load_by('user', 'email', $data['email']);
+            if ($existing && $existing->id !== $id) {
+                return error(409, 'Email already registered');
+            }
+        }
+
+        // Always strip role — use custom handler for role elevation
+        unset($data['role']);
+    }
+
+    return entity_save($type, ['id' => $id] + $data);
 }
 
 function _lf_type_handle_delete(string $type): array

@@ -1,4 +1,4 @@
 # Role definitions
 
-roles: admin
-default_role: admin
+roles: user
+default_role: user

@@ -42,7 +42,13 @@ assert($API_DIRECTIVES['page']['list'] === 'public');
 assert($API_DIRECTIVES['page']['view'] === 'public');
 echo '[PASS] Parsed page $api() directives (2 actions, read-only)' . "\n";
 
-assert(!isset($API_DIRECTIVES['user']), 'user should have no API directives');
+assert(isset($API_DIRECTIVES['user']), 'user should have API directives');
+assert(count($API_DIRECTIVES['user']) === 3, 'user should have 3 API actions parsed');
+assert($API_DIRECTIVES['user']['create'] === 'public');
+assert($API_DIRECTIVES['user']['update'] === 'auth');
+assert($API_DIRECTIVES['user']['delete'] === 'auth');
+echo '[PASS] Parsed user $api() directives (3 actions parsed)' . "\n";
+
 assert(!isset($API_DIRECTIVES['audit_log']), 'audit_log should have no API directives');
 echo '[PASS] Types without $api() have no directives' . "\n";
 
@@ -92,17 +98,33 @@ assert(!isset($routes['_api_page_update']), 'page should not have update route')
 assert(!isset($routes['_api_page_delete']), 'page should not have delete route');
 echo "[PASS] page has only list + view routes (read-only)\n";
 
-// No routes for user or audit_log
+// User routes (create + update)
+assert(isset($routes['_api_user_create']));
+assert($routes['_api_user_create']['path'] === '/api/user');
+assert($routes['_api_user_create']['method'] === 'POST');
+assert($routes['_api_user_create']['auth'] === 'public');
+echo "[PASS] user create route: POST /api/user (public)\n";
+
+assert(isset($routes['_api_user_update']));
+assert($routes['_api_user_update']['path'] === '/api/user/:id');
+assert($routes['_api_user_update']['method'] === 'PUT');
+assert($routes['_api_user_update']['auth'] === 'auth');
+echo "[PASS] user update route: PUT /api/user/:id (auth)\n";
+
+// User delete is silently ignored even though $api(delete) is declared
+$userDeleteRoutes = array_filter(array_keys($routes), fn($k) => $k === '_api_user_delete');
+assert(empty($userDeleteRoutes), 'user delete route should not be generated');
+echo "[PASS] user delete route silently ignored\n";
+
+// No routes for audit_log
 $routeKeys = array_keys($routes);
-$userRoutes = array_filter($routeKeys, fn($k) => str_starts_with($k, '_api_user_'));
 $auditRoutes = array_filter($routeKeys, fn($k) => str_starts_with($k, '_api_audit_log_'));
-assert(empty($userRoutes), 'user should have no auto-generated routes');
 assert(empty($auditRoutes), 'audit_log should have no auto-generated routes');
 echo '[PASS] No routes for types without $api() directives' . "\n";
 
 // --- Test 3: Route count ---
 
-assert(count($routes) === 7, 'Should have 7 auto-generated routes (5 article + 2 page)');
+assert(count($routes) === 9, 'Should have 9 auto-generated routes (5 article + 2 page + 2 user)');
 echo "[PASS] Total route count: " . count($routes) . "\n";
 
 // --- Test 4: CRUD handlers with in-memory DB ---
@@ -286,5 +308,157 @@ echo "[PASS] Combined filter skips unknown fields\n";
 
 // Clean up
 $_GET = [];
+
+// --- Test 9: User $api(create) — public registration ---
+
+$TYPES = _lf_parse_types(__DIR__ . '/fixtures/types_api.yml');
+$db = new Database(':memory:');
+_lf_schema_apply($db, $TYPES);
+
+// Simulate public route
+$matched_route = ['auth' => 'public', 'params' => []];
+
+// Successful registration returns user + tokens
+$_POST = ['name' => 'Test User', 'email' => 'test@example.com', 'password' => 'secret123'];
+$_SERVER['REQUEST_METHOD'] = 'POST';
+$_SERVER['CONTENT_TYPE'] = 'application/x-www-form-urlencoded';
+$request = new Request();
+$result = _lf_type_handle_create('user');
+assert(is_array($result), 'User create should return array');
+assert(isset($result['user']), 'Should have user key');
+assert(isset($result['token']), 'Should have token key');
+assert(isset($result['refresh_token']), 'Should have refresh_token key');
+assert($result['user']->email === 'test@example.com');
+assert(!isset($result['user']->password), 'Password should be stripped');
+echo "[PASS] Public registration returns user + tokens\n";
+
+// Role defaults to schema default (not injectable on public)
+assert($result['user']->role === 'user', 'Role should be schema default');
+echo "[PASS] Public registration: role is schema default\n";
+
+// Role injection blocked on public route
+$_POST = ['name' => 'Admin Hacker', 'email' => 'hacker@example.com', 'password' => 'secret', 'role' => 'admin'];
+$request = new Request();
+$injected = _lf_type_handle_create('user');
+assert($injected['user']->role === 'user', 'Injected role should be ignored on public');
+echo "[PASS] Public registration: role injection blocked\n";
+
+// Duplicate email returns 409
+$_POST = ['name' => 'Duplicate', 'email' => 'test@example.com', 'password' => 'secret'];
+$request = new Request();
+$dup = _lf_type_handle_create('user');
+assert(is_array($dup) && isset($dup['error']), 'Duplicate email should return error');
+assert(str_contains($dup['error'], 'Email already registered'), 'Should say email already registered');
+echo "[PASS] Duplicate email returns 409 error\n";
+
+// Missing password returns 422
+$_POST = ['name' => 'No Pass', 'email' => 'nopass@example.com'];
+$request = new Request();
+$noPass = _lf_type_handle_create('user');
+assert(is_array($noPass) && isset($noPass['error']), 'Missing password should return error');
+assert(str_contains($noPass['error'], 'Password is required'), 'Should say password required');
+echo "[PASS] Missing password returns 422 error\n";
+
+// --- Test 10: User $api(create) — role always stripped even on role-gated route ---
+
+$matched_route = ['auth' => 'admin', 'params' => []];
+
+$_POST = ['name' => 'Staff User', 'email' => 'staff@example.com', 'password' => 'secret', 'role' => 'editor'];
+$request = new Request();
+$staff = _lf_type_handle_create('user');
+assert(is_object($staff), 'Role-gated create should return entity directly (no token wrapper)');
+assert($staff->role === 'user', 'Role should always be schema default on $api() routes');
+echo "[PASS] Role-gated create: role still stripped (use custom handler for elevation)\n";
+
+// --- Test 11: User $api(update) — ownership enforcement ---
+
+global $_current_user;
+
+// Get user IDs from earlier registrations
+$testUser = entity_load_by('user', 'email', 'test@example.com');
+$testUserId = $testUser->id;
+$hackerUser = entity_load_by('user', 'email', 'hacker@example.com');
+$hackerUserId = $hackerUser->id;
+
+// Simulate logged-in as testUser
+$_current_user = $testUser;
+$matched_route = ['auth' => 'auth', 'params' => ['id' => (string) $testUserId]];
+
+// Update own name — should work
+$_POST = ['name' => 'Updated Name'];
+$_SERVER['REQUEST_METHOD'] = 'PUT';
+$request = new Request();
+$updated = _lf_type_handle_update('user');
+assert(is_object($updated));
+assert($updated->name === 'Updated Name');
+echo "[PASS] User update: own name changed\n";
+
+// Update own email to unused email — should work
+$_POST = ['email' => 'newemail@example.com'];
+$request = new Request();
+$updated = _lf_type_handle_update('user');
+assert($updated->email === 'newemail@example.com');
+echo "[PASS] User update: own email changed\n";
+
+// Update email to taken email — should fail
+$_POST = ['email' => 'hacker@example.com'];
+$request = new Request();
+$dupUpdate = _lf_type_handle_update('user');
+assert(is_array($dupUpdate) && isset($dupUpdate['error']));
+assert(str_contains($dupUpdate['error'], 'Email already registered'));
+echo "[PASS] User update: duplicate email blocked\n";
+
+// Update own email to same email — should work (not a duplicate of yourself)
+$_POST = ['email' => 'newemail@example.com'];
+$request = new Request();
+$sameEmail = _lf_type_handle_update('user');
+assert(is_object($sameEmail));
+assert($sameEmail->email === 'newemail@example.com');
+echo "[PASS] User update: keeping own email is not a duplicate\n";
+
+// Try to update another user's account — should be blocked
+$matched_route = ['auth' => 'auth', 'params' => ['id' => (string) $hackerUserId]];
+$_POST = ['name' => 'Pwned'];
+$request = new Request();
+$blocked = _lf_type_handle_update('user');
+assert(is_array($blocked) && isset($blocked['error']));
+assert(str_contains($blocked['error'], 'your own account'));
+echo "[PASS] User update (auth): cannot edit another user\n";
+
+// Role injection blocked (always, even on role-gated routes)
+$matched_route = ['auth' => 'auth', 'params' => ['id' => (string) $testUserId]];
+$_POST = ['role' => 'admin'];
+$request = new Request();
+$roleUpdate = _lf_type_handle_update('user');
+assert(is_object($roleUpdate));
+assert($roleUpdate->role === 'user', 'Role should never change on $api() routes');
+echo "[PASS] User update: role always stripped\n";
+
+// Ownership enforced even on role-gated routes
+$matched_route = ['auth' => 'admin', 'params' => ['id' => (string) $hackerUserId]];
+$_POST = ['name' => 'Pwned by Admin'];
+$request = new Request();
+$blockedAdmin = _lf_type_handle_update('user');
+assert(is_array($blockedAdmin) && isset($blockedAdmin['error']));
+assert(str_contains($blockedAdmin['error'], 'your own account'));
+echo "[PASS] User update: ownership enforced even on role-gated route\n";
+
+// Clean up current user
+$_current_user = null;
+
+// --- Test 12: Non-user create unchanged ---
+
+$matched_route = ['auth' => 'auth', 'params' => []];
+$_POST = ['title' => 'Direct Article', 'body' => 'content'];
+$_SERVER['REQUEST_METHOD'] = 'POST';
+$request = new Request();
+$article = _lf_type_handle_create('article');
+assert(is_object($article), 'Article create should return entity object directly');
+assert($article->title === 'Direct Article');
+echo "[PASS] Non-user create unchanged (returns entity directly)\n";
+
+// Clean up
+$_POST = [];
+$_SERVER['REQUEST_METHOD'] = 'GET';
 
 echo "\n=== All API directive tests passed ===\n";

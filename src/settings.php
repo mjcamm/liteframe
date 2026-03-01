@@ -18,6 +18,7 @@ function _lf_settings_load(string $file): void
 
     foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
         if (str_starts_with(trim($line), '#')) continue;
+        $line = preg_replace('/\s+#.*$/', '', $line);
 
         // Nested key (indented under a section)
         if ($currentSection && preg_match('/^\s+/', $line)) {

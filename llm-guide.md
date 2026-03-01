@@ -220,6 +220,65 @@ audit_log:
 - Duplicate actions on the same type — last one wins
 - Types without any `$api()` lines generate zero routes
 
+### $api() on User Type — Auto Registration & Profile
+
+When `$api()` directives are used on the `user` type, the framework applies automatic safety handling. This means adding `$api(create): public` gives you a working registration endpoint with no custom code.
+
+```yaml
+user:
+  name*: string
+  email*: email
+  role: string, default=user
+  $api(create): public      # registration endpoint
+  $api(update): auth         # edit own profile
+```
+
+**Create (`$api(create)`) on user:**
+- **Password required** — returns 422 if missing
+- **Duplicate email check** — returns 409 if email already exists
+- **Role always stripped** — the `role` field is removed from input; SQLite applies the schema `default` value. This prevents role injection regardless of the route's permission level.
+- **Public routes return tokens** — when the permission is `public`, the response includes `user`, `token`, and `refresh_token` (same format as `/api/auth/login`), so the user is logged in immediately after registration
+- **Non-public routes return entity only** — when the permission is `auth` or a role name, the response is just the entity (no token wrapper)
+
+```
+POST /api/user
+Body: { "name": "Jane", "email": "jane@example.com", "password": "secret" }
+Response: { "user": {...}, "token": "jwt...", "refresh_token": "hex..." }
+```
+
+**Update (`$api(update)`) on user:**
+- **Ownership enforced** — users can only update their own account (`current_user()->id` must match `:id`). Returns 403 otherwise.
+- **Duplicate email check** — if email is being changed, checks it's not taken by another user. Keeping your own email is fine.
+- **Role always stripped** — same as create, role cannot be changed through `$api()`.
+
+**Delete (`$api(delete)`) on user:**
+- **Not allowed** — `$api(delete)` is silently ignored on the user type. The route is never generated. User deletion requires a custom handler where you control the logic (cleanup related data, revoke tokens, etc).
+
+**Role elevation:** The `role` field is always stripped on `$api()` routes for user. If you need to change a user's role (e.g. promoting someone), write a custom handler:
+
+```php
+// handlers/promote_user.php
+<?php
+return function () {
+    $id = (int) route_param('id');
+    return entity_save('user', [
+        'id' => $id,
+        'role' => input('role'),
+    ]);
+};
+```
+
+```yaml
+# config/routes.yml
+promote_user:
+  path: /users/:id/role
+  handler: promote_user
+  method: PUT
+  auth: admin
+```
+
+Custom handlers bypass all `$api()` safety handling — they call `entity_save()` directly with full control.
+
 ### $api(list) — Full Reference
 
 The list handler returns paginated, filtered, sorted results. Everything is controlled via query parameters — no custom handler code needed for most use cases.
@@ -439,7 +498,13 @@ return function () {
 };
 ```
 
-### handlers/register.php — User registration
+### User registration — no handler needed
+
+Add `$api(create): public` to the user type in `types.yml` and registration is handled automatically (duplicate email check, password required, role stripped, tokens returned). See **$api() on User Type** above.
+
+If you need custom registration logic (e.g. sending a welcome email, invite codes), write a handler:
+
+### handlers/register.php — Custom user registration
 ```php
 <?php
 return function () {
@@ -460,6 +525,8 @@ return function () {
         'email' => $email,
         'password' => $password,  // auto-hashed by framework
     ]);
+
+    // Custom logic here (send welcome email, etc.)
 
     return [
         'user' => $user,
