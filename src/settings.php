@@ -77,3 +77,28 @@ function setting(string $key, mixed $default = null): mixed
 
     return $_settings[$key] ?? $default;
 }
+
+// --- Roles config ---
+
+$_roles = [];
+
+function _lf_roles_load(string $file): void
+{
+    global $_roles;
+    if (!file_exists($file)) return;
+
+    foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        if (str_starts_with(trim($line), '#')) continue;
+        $line = preg_replace('/\s+#.*$/', '', $line);
+        $trimmed = trim($line);
+        if (!str_contains($trimmed, ':')) continue;
+        [$key, $value] = explode(':', $trimmed, 2);
+        $_roles[trim($key)] = trim($value);
+    }
+}
+
+function role_default(): string
+{
+    global $_roles;
+    return $_roles['default_role'] ?? 'user';
+}

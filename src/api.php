@@ -187,8 +187,9 @@ function _lf_type_handle_create(string $type): array|object
             return error(409, 'Email already registered');
         }
 
-        // Always strip role — use custom handler for role elevation
+        // Always strip role and apply default from roles.yml
         unset($data['role']);
+        $data['role'] = role_default();
 
         $user = entity_save('user', $data);
 

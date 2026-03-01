@@ -291,6 +291,15 @@ function liteframe_build(string $projectDir, string $distDir): string
     $output[] = '$_settings = ' . var_export($GLOBALS['_settings'], true) . ';';
     $output[] = '';
 
+    // --- Roles ---
+    $rolesFile = $projectDir . '/config/roles.yml';
+    if (file_exists($rolesFile)) {
+        _lf_roles_load($rolesFile);
+    }
+    $output[] = '// === COMPILED ROLES ===';
+    $output[] = '$_roles = ' . var_export($GLOBALS['_roles'], true) . ';';
+    $output[] = '';
+
     // CORS (before cron, matching dev mode order)
     $output[] = '// CORS';
     $output[] = 'if (_lf_cors_headers()) return;';
@@ -437,6 +446,12 @@ function liteframe_build(string $projectDir, string $distDir): string
         mkdir($distDir, 0755, true);
     }
 
+    // Remove .gitkeep if present
+    $gitkeep = $distDir . '/.gitkeep';
+    if (file_exists($gitkeep)) {
+        unlink($gitkeep);
+    }
+
     $compiled = implode("\n", $output);
     $distFile = $distDir . '/index.php';
     $tmpFile = $distDir . '/index.php.' . getmypid() . '.tmp';
@@ -475,8 +490,22 @@ function copy_dir(string $src, string $dst, array $exclude = []): void
 // Run build when accessed directly (CLI or browser)
 if (php_sapi_name() === 'cli' || !isset($_SERVER['REQUEST_URI']) || basename($_SERVER['SCRIPT_FILENAME']) === 'build.php') {
     $distFile = liteframe_build(__DIR__, __DIR__ . '/dist');
-    $size = number_format(filesize($distFile));
-    $frontend = is_dir(__DIR__ . '/frontend/build') ? ' + frontend' : '';
+    $sizeKB = number_format(filesize($distFile) / 1024, 1) . ' KB';
+
+    $frontendInfo = '';
+    $frontendDir = __DIR__ . '/frontend/build';
+    if (is_dir($frontendDir)) {
+        $frontendBytes = 0;
+        $iter = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($frontendDir, RecursiveDirectoryIterator::SKIP_DOTS));
+        foreach ($iter as $file) {
+            $frontendBytes += $file->getSize();
+        }
+        $frontendKB = number_format($frontendBytes / 1024, 1) . ' KB';
+        $frontendInfo = '<p><code>frontend/build/</code> — ' . $frontendKB . '</p>';
+        $frontendInfoCli = " + frontend ({$frontendKB})";
+    } else {
+        $frontendInfoCli = '';
+    }
 
     if (php_sapi_name() !== 'cli') {
         header('Content-Type: text/html');
@@ -485,9 +514,10 @@ if (php_sapi_name() === 'cli' || !isset($_SERVER['REQUEST_URI']) || basename($_S
         echo '.ok{color:#16a34a;font-weight:bold}code{background:#f1f5f9;padding:2px 6px;border-radius:4px}</style></head><body>';
         echo '<h2>LiteFrame Build</h2>';
         echo '<p class="ok">Build complete</p>';
-        echo '<p><code>dist/index.php</code> — ' . $size . ' bytes' . $frontend . '</p>';
+        echo '<p><code>dist/index.php</code> — ' . $sizeKB . '</p>';
+        echo $frontendInfo;
         echo '</body></html>';
     } else {
-        echo "Build complete — dist/index.php ({$size} bytes){$frontend}\n";
+        echo "Build complete — dist/index.php ({$sizeKB}){$frontendInfoCli}\n";
     }
 }

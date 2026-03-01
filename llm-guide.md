@@ -1205,3 +1205,104 @@ if (variable_get('maintenance_mode', false)) {
 $count = variable_get('total_signups', 0);
 variable_set('total_signups', $count + 1);
 ```
+
+---
+
+## Function Index
+
+Every user-facing function in the framework. Internal functions (`_lf_` prefix) are omitted — those are not meant to be called from handlers, hooks, or functions.
+
+### Entity CRUD
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `entity_save(string $type, array $data)` | `object\|array` | Create or update an entity. Include `id` in data to update. Returns entity or validation error array. |
+| `entity_load(int $id, array $with = [])` | `?object` | Load entity by ID. Pass reference field names in `$with` to eager-load, or `['*']` for all. |
+| `entity_load_by(string $type, string $field, mixed $value)` | `?object` | Load entity by field value within a type. |
+| `entity_delete(int $id)` | `bool\|array` | Delete entity. Returns `true`, `false` (not found), or error array (blocked by hook). |
+| `entity_query(string $type)` | `EntityQuery` | Create a chainable query builder. |
+
+### Entity Query Builder
+
+Methods on the `EntityQuery` object returned by `entity_query()`. All filter/sort methods return `self` for chaining.
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `->where(string $field, mixed $operatorOrValue, mixed $value = null)` | `self` | WHERE clause. 2 args: equality. 3 args: operator (`=`, `!=`, `<`, `>`, `<=`, `>=`, `LIKE`, `IS`, `IS NOT`). Pass `null` for IS NULL. |
+| `->whereRaw(string $sql, array $params = [])` | `self` | Raw SQL WHERE fragment with `?` placeholders. |
+| `->sort(string $field, string $direction = 'asc')` | `self` | ORDER BY clause. |
+| `->limit(int $limit)` | `self` | LIMIT clause. |
+| `->offset(int $offset)` | `self` | OFFSET clause. |
+| `->with(string ...$fields)` | `self` | Eager-load references. Pass field names or `'*'` for all. |
+| `->get()` | `array` | Execute query, return array of entities. |
+| `->first()` | `?object` | Execute query, return first result or null. |
+| `->count()` | `int` | Count matching entities. |
+| `->paginate(int $page = 1, int $perPage = 20)` | `array` | Paginated results: `{data: [...], meta: {page, per_page, total, total_pages}}`. |
+
+### Request
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `input(string $key, mixed $default = null)` | `mixed` | Get input value from GET, POST, or JSON body. |
+| `input_exists(string $key)` | `bool` | Check if input key exists. |
+| `input_all()` | `array` | Get all input as array. |
+| `input_file(string $key)` | `?array` | Get uploaded file info. |
+| `route_param(string $key)` | `mixed` | Get route parameter (`:id`, `:slug`, etc). |
+| `paginate_request(int $defaultPerPage = 20)` | `array` | Parse `page` and `per_page` from query params. Returns `[$page, $perPage]`. |
+| `current_user()` | `?object` | Get authenticated user for current request, or null. |
+
+### Response
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `error(int $code, string $message)` | `array` | Set HTTP status code, return `['error' => $message]`. |
+| `validation_error(array $fields)` | `array` | Return 422 response with per-field errors: `{error: 'Validation failed', fields: {...}}`. |
+
+### Settings & Roles
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `setting(string $key, mixed $default = null)` | `mixed` | Read from `settings.yml`. Dot notation for nested: `setting('cors.origin')`. |
+| `role_default()` | `string` | Get `default_role` from `config/roles.yml`. Falls back to `'user'`. |
+
+### Variables (Key-Value Store)
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `variable_get(string $name, mixed $default = null)` | `mixed` | Get a persistent variable. Values are JSON-decoded. |
+| `variable_set(string $name, mixed $value)` | `void` | Set a persistent variable. Values are JSON-encoded. |
+| `variable_del(string $name)` | `void` | Delete a persistent variable. |
+
+### Hooks
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `hook_fire(string $type, string $event, mixed ...$args)` | `mixed` | Fire a lifecycle hook. Returns modified data or hook result. |
+| `hook_exists(string $type, string $event)` | `bool` | Check if a hook is registered. |
+
+### Files
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `file_store(array $file, string $storage, string $entityType = null, int $entityId = null, string $field = null)` | `int` | Store an uploaded file. `$storage` is `'public'` or `'protected'`. Returns file ID. |
+| `file_delete(int $fileId)` | `void` | Delete a file by ID (removes from disk and `_files` table). |
+| `file_resolve(int $fileId)` | `?object` | Resolve file ID to object with `id`, `filename`, `url`, `mime_type`, `size`. |
+
+### Database (via `$db` global)
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `$db->one(string $sql, array $params = [])` | `?object` | Query single row. |
+| `$db->all(string $sql, array $params = [])` | `array` | Query multiple rows. |
+| `$db->exec(string $sql, array $params = [])` | `int` | Execute write operation. Returns affected row count. |
+| `$db->lastId()` | `int` | Last inserted row ID. |
+| `$db->transaction(callable $fn)` | `mixed` | Run callback in transaction. Auto-commits; rolls back on exception. |
+| `$db->pdo()` | `PDO` | Get underlying PDO instance. |
+
+### Auth (internal, but useful for custom registration handlers)
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `_lf_auth_token(object $user)` | `string` | Generate JWT access token. |
+| `_lf_auth_refresh_token(object $user)` | `string` | Generate and store refresh token. |
+| `_lf_auth_validate_token(string $token)` | `?array` | Validate JWT. Returns payload or null. |

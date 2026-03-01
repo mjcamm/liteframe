@@ -75,6 +75,7 @@ require_once __DIR__ . '/src/api.php';
 $db = new Database(__DIR__ . '/data.db');
 $request = new Request();
 _lf_settings_load(__DIR__ . '/settings.yml');
+_lf_roles_load(__DIR__ . '/config/roles.yml');
 
 // Schema from types.yml
 $TYPES = _lf_parse_types(__DIR__ . '/config/types.yml');
