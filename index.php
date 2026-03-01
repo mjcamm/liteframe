@@ -131,11 +131,11 @@ if (file_exists($routesFile)) {
 $apiRoutes = _lf_api_routes_from_types();
 
 // Add built-in routes
-$routes['auth_login'] = ['path' => '/api/auth/login', 'handler' => '_auth_login', 'method' => 'POST', 'auth' => 'false'];
-$routes['auth_refresh'] = ['path' => '/api/auth/refresh', 'handler' => '_auth_refresh', 'method' => 'POST', 'auth' => 'false'];
-$routes['auth_logout'] = ['path' => '/api/auth/logout', 'handler' => '_auth_logout', 'method' => 'POST', 'auth' => 'false'];
-$routes['_lf_file_serve'] = ['path' => '/api/files/:id', 'handler' => '_lf_file_serve', 'method' => 'GET', 'auth' => 'false'];
-$routes['_lf_cron_run'] = ['path' => '/api/cron', 'handler' => '_lf_cron_run', 'method' => 'GET', 'auth' => 'false'];
+$routes['auth_login'] = ['path' => '/api/auth/login', 'handler' => '_auth_login', 'method' => 'POST', 'auth' => 'public'];
+$routes['auth_refresh'] = ['path' => '/api/auth/refresh', 'handler' => '_auth_refresh', 'method' => 'POST', 'auth' => 'public'];
+$routes['auth_logout'] = ['path' => '/api/auth/logout', 'handler' => '_auth_logout', 'method' => 'POST', 'auth' => 'public'];
+$routes['_lf_file_serve'] = ['path' => '/api/files/:id', 'handler' => '_lf_file_serve', 'method' => 'GET', 'auth' => 'public'];
+$routes['_lf_cron_run'] = ['path' => '/api/cron', 'handler' => '_lf_cron_run', 'method' => 'GET', 'auth' => 'public'];
 
 $router = new Router();
 // routes.yml + built-in first (takes priority over auto-generated)

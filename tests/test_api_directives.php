@@ -54,7 +54,7 @@ $routes = _lf_api_routes_from_types();
 assert(isset($routes['_api_article_list']));
 assert($routes['_api_article_list']['path'] === '/api/article');
 assert($routes['_api_article_list']['method'] === 'GET');
-assert($routes['_api_article_list']['auth'] === 'false');
+assert($routes['_api_article_list']['auth'] === 'public');
 assert($routes['_api_article_list']['_type'] === 'article');
 assert($routes['_api_article_list']['_action'] === 'list');
 echo "[PASS] article list route: GET /api/article (public)\n";
@@ -62,29 +62,26 @@ echo "[PASS] article list route: GET /api/article (public)\n";
 assert(isset($routes['_api_article_get']));
 assert($routes['_api_article_get']['path'] === '/api/article/:id');
 assert($routes['_api_article_get']['method'] === 'GET');
-assert($routes['_api_article_get']['auth'] === 'false');
+assert($routes['_api_article_get']['auth'] === 'public');
 assert($routes['_api_article_get']['_action'] === 'get');
 echo "[PASS] article view route: GET /api/article/:id (public)\n";
 
 assert(isset($routes['_api_article_create']));
 assert($routes['_api_article_create']['path'] === '/api/article');
 assert($routes['_api_article_create']['method'] === 'POST');
-assert($routes['_api_article_create']['auth'] === 'true');
-assert(!isset($routes['_api_article_create']['roles']));
+assert($routes['_api_article_create']['auth'] === 'auth');
 echo "[PASS] article create route: POST /api/article (auth)\n";
 
 assert(isset($routes['_api_article_update']));
 assert($routes['_api_article_update']['path'] === '/api/article/:id');
 assert($routes['_api_article_update']['method'] === 'PUT');
-assert($routes['_api_article_update']['auth'] === 'true');
-assert(!isset($routes['_api_article_update']['roles']));
+assert($routes['_api_article_update']['auth'] === 'auth');
 echo "[PASS] article update route: PUT /api/article/:id (auth)\n";
 
 assert(isset($routes['_api_article_delete']));
 assert($routes['_api_article_delete']['path'] === '/api/article/:id');
 assert($routes['_api_article_delete']['method'] === 'DELETE');
-assert($routes['_api_article_delete']['auth'] === 'true');
-assert($routes['_api_article_delete']['roles'] === 'admin');
+assert($routes['_api_article_delete']['auth'] === 'admin');
 echo "[PASS] article delete route: DELETE /api/article/:id (admin)\n";
 
 // Page routes (read-only)

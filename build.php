@@ -310,11 +310,11 @@ function liteframe_build(string $projectDir, string $distDir): string
 
     // Add built-in auth routes
     $output[] = '// Built-in auth routes';
-    $output[] = '$ROUTES["auth_login"] = ["path" => "/api/auth/login", "handler" => "_auth_login", "method" => "POST", "auth" => "false"];';
-    $output[] = '$ROUTES["auth_refresh"] = ["path" => "/api/auth/refresh", "handler" => "_auth_refresh", "method" => "POST", "auth" => "false"];';
-    $output[] = '$ROUTES["auth_logout"] = ["path" => "/api/auth/logout", "handler" => "_auth_logout", "method" => "POST", "auth" => "false"];';
-    $output[] = '$ROUTES["_lf_file_serve"] = ["path" => "/api/files/:id", "handler" => "_lf_file_serve", "method" => "GET", "auth" => "false"];';
-    $output[] = '$ROUTES["_lf_cron_run"] = ["path" => "/api/cron", "handler" => "_lf_cron_run", "method" => "GET", "auth" => "false"];';
+    $output[] = '$ROUTES["auth_login"] = ["path" => "/api/auth/login", "handler" => "_auth_login", "method" => "POST", "auth" => "public"];';
+    $output[] = '$ROUTES["auth_refresh"] = ["path" => "/api/auth/refresh", "handler" => "_auth_refresh", "method" => "POST", "auth" => "public"];';
+    $output[] = '$ROUTES["auth_logout"] = ["path" => "/api/auth/logout", "handler" => "_auth_logout", "method" => "POST", "auth" => "public"];';
+    $output[] = '$ROUTES["_lf_file_serve"] = ["path" => "/api/files/:id", "handler" => "_lf_file_serve", "method" => "GET", "auth" => "public"];';
+    $output[] = '$ROUTES["_lf_cron_run"] = ["path" => "/api/cron", "handler" => "_lf_cron_run", "method" => "GET", "auth" => "public"];';
     $output[] = '';
 
     // Auto-generated $api() routes
@@ -475,5 +475,17 @@ if (php_sapi_name() === 'cli' || !isset($_SERVER['REQUEST_URI']) || basename($_S
     $distFile = liteframe_build(__DIR__, __DIR__ . '/dist');
     $size = number_format(filesize($distFile));
     $frontend = is_dir(__DIR__ . '/frontend/build') ? ' + frontend' : '';
-    echo "Build complete — dist/index.php ({$size} bytes){$frontend}";
+
+    if (php_sapi_name() !== 'cli') {
+        header('Content-Type: text/html');
+        echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>LiteFrame Build</title>';
+        echo '<style>body{font-family:monospace;max-width:600px;margin:60px auto;padding:0 20px;color:#1a1a2e}';
+        echo '.ok{color:#16a34a;font-weight:bold}code{background:#f1f5f9;padding:2px 6px;border-radius:4px}</style></head><body>';
+        echo '<h2>LiteFrame Build</h2>';
+        echo '<p class="ok">Build complete</p>';
+        echo '<p><code>dist/index.php</code> — ' . $size . ' bytes' . $frontend . '</p>';
+        echo '</body></html>';
+    } else {
+        echo "Build complete — dist/index.php ({$size} bytes){$frontend}\n";
+    }
 }

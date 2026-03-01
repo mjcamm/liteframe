@@ -91,24 +91,24 @@ assert(_lf_auth_validate_refresh($refresh) === null);
 echo "[PASS] Refresh token revoked\n";
 
 // Test 12: Auth check — public route
-$result = _lf_auth_check_route(['auth' => 'false']);
+$result = _lf_auth_check_route(['auth' => 'public']);
 assert($result === null);
 echo "[PASS] Public route allows anyone\n";
 
 // Test 13: Auth check — protected route, no user
 $_current_user = null;
-$result = _lf_auth_check_route(['auth' => 'true']);
+$result = _lf_auth_check_route(['auth' => 'auth']);
 assert($result['error'] === 'Authentication required');
 echo "[PASS] Protected route blocks unauthenticated\n";
 
 // Test 14: Auth check — protected route, with user
 $_current_user = $user;
-$result = _lf_auth_check_route(['auth' => 'true']);
+$result = _lf_auth_check_route(['auth' => 'auth']);
 assert($result === null);
 echo "[PASS] Protected route allows authenticated user\n";
 
 // Test 15: Role check — correct role
-$result = _lf_auth_check_route(['auth' => 'true', 'roles' => 'admin, editor']);
+$result = _lf_auth_check_route(['auth' => 'admin, editor']);
 assert($result === null);
 echo "[PASS] Role check passes for admin\n";
 
@@ -120,11 +120,16 @@ $user2 = entity_save('user', [
     'role' => 'user',
 ]);
 $_current_user = $user2;
-$result = _lf_auth_check_route(['auth' => 'true', 'roles' => 'admin, editor']);
+$result = _lf_auth_check_route(['auth' => 'admin, editor']);
 assert($result['error'] === 'Insufficient permissions');
 echo "[PASS] Role check blocks user without required role\n";
 
-// Test 17: Secret key auto-generates and persists
+// Test 17: Auth check — missing auth config
+$result = _lf_auth_check_route(['handler' => 'test']);
+assert($result['error'] === 'Route missing auth config');
+echo "[PASS] Route without auth config returns 500\n";
+
+// Test 18: Secret key auto-generates and persists
 $secret1 = _lf_auth_secret();
 $secret2 = _lf_auth_secret();
 assert($secret1 === $secret2, 'Secret should be consistent');

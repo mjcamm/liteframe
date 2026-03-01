@@ -301,30 +301,30 @@ articles_list:
   path: /articles              # becomes /api/articles
   handler: articles            # loads handlers/articles.php
   method: GET
-  auth: false                  # public route
+  auth: public                 # no authentication required
 
 articles_create:
   path: /articles
   handler: articles_create
   method: POST
-  auth: true                   # requires JWT
-  roles: admin, editor         # optional: restrict to specific roles
+  auth: admin, editor          # requires JWT + one of these roles
 
 user_profile:
   path: /users/:id             # :id is a route parameter
   handler: user_profile
   method: GET
-  auth: false
+  auth: auth                   # requires JWT (any authenticated user)
 ```
 
 **Important:**
 - Paths are automatically prefixed with `/api/`
 - Route parameters (`:id`, `:slug`, etc) are accessed via `route_param('id')` in handlers
-- `auth: false` — public, no token needed
-- `auth: true` — requires valid JWT in Authorization header
-- `roles: admin, editor` — requires auth AND user must have one of these roles
+- `auth` is **required** on every route — omitting it returns a 500 error
+- `auth: public` — no authentication required
+- `auth: auth` — requires valid JWT in Authorization header
+- `auth: admin` or `auth: admin, editor` — requires JWT + user must have one of the listed roles
+- Same syntax as `$api()` directives in `types.yml`
 - Comments with `#` are supported
-- Unknown auth values (typos like `True`, `yes`) return 500 error
 
 **Built-in routes (always available, no config needed):**
 - `POST /api/auth/login` — email/password login
@@ -965,13 +965,15 @@ $db->transaction(function ($db) {
 
 ### Compile
 
-```bash
-php liteframe build          # Build backend + frontend
-php liteframe build:back     # Build PHP backend only → dist/index.php
-php liteframe build:front    # Build frontend only (npm run build)
+Visit `build.php` in the browser to compile:
+
+```
+http://yoursite/build.php
 ```
 
-This produces a `dist/` folder ready to deploy:
+This compiles the PHP backend and copies the frontend build into `dist/`. For the frontend, run `npm run build` in your `frontend/` directory first (standard for any SPA framework).
+
+The result is a `dist/` folder ready to deploy:
 ```
 dist/
   index.php      # single compiled PHP file (all framework + handlers + hooks + config)

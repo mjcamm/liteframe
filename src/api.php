@@ -36,15 +36,8 @@ function _lf_api_routes_from_types(): array
                 '_action' => $map['_action'],
             ];
 
-            // Permission mapping
-            if ($permission === 'public') {
-                $route['auth'] = 'false';
-            } elseif ($permission === 'auth') {
-                $route['auth'] = 'true';
-            } else {
-                $route['auth'] = 'true';
-                $route['roles'] = $permission;
-            }
+            // Permission maps directly — public, auth, or role name(s)
+            $route['auth'] = $permission;
 
             $routes['_api_' . $type . '_' . $map['_action']] = $route;
         }

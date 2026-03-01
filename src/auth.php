@@ -229,32 +229,35 @@ function _lf_auth_authenticate_request(): void
  */
 function _lf_auth_check_route(array $route): ?array
 {
-    $auth = $route['auth'] ?? 'false';
+    $auth = $route['auth'] ?? null;
+
+    // Auth is required on every route
+    if ($auth === null) {
+        return error(500, 'Route missing auth config');
+    }
+
     $user = current_user();
 
     // Public route
-    if ($auth === 'false') return null;
+    if ($auth === 'public') return null;
 
-    // Auth required
-    if ($auth === 'true') {
+    // Auth required (any authenticated user)
+    if ($auth === 'auth') {
         if (!$user) {
             return error(401, 'Authentication required');
         }
-
-        // Check roles if specified
-        $roles = $route['roles'] ?? null;
-        if ($roles) {
-            $allowed = array_map('trim', explode(',', $roles));
-            if (!in_array($user->role, $allowed)) {
-                return error(403, 'Insufficient permissions');
-            }
-        }
-
         return null;
     }
 
-    // Reject unknown auth values (typos like 'True', 'yes', etc.)
-    return error(500, "Invalid auth config: {$auth}");
+    // Role-based — auth required + user must have one of the specified roles
+    if (!$user) {
+        return error(401, 'Authentication required');
+    }
+    $allowed = array_map('trim', explode(',', $auth));
+    if (!in_array($user->role, $allowed)) {
+        return error(403, 'Insufficient permissions');
+    }
+    return null;
 }
 
 // --- Built-in auth handlers ---
